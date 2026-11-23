@@ -1,0 +1,206 @@
+{
+  "ui": {
+    "window": {
+      "title": "Omni Controls",
+      "width": 480,
+      "height": 960,
+      "layout": {
+        "type": "vertical",
+        "children": [
+          "http-url",
+          "http-method",
+          "http-send",
+          "http-result",
+          "file-open",
+          "file-save",
+          "theme",
+          "name",
+          "notifications",
+          "layout",
+          "volume",
+          "recent-items",
+          "scrollable-panel"
+        ]
+      }
+    },
+    "menus": [
+      {
+        "label": "File",
+        "items": [
+          {
+            "text": "New",
+            "message": "New item selected"
+          },
+          {
+            "text": "Save",
+            "message": "Save selected"
+          }
+        ]
+      },
+      {
+        "label": "Help",
+        "items": [
+          {
+            "text": "About",
+            "message": "Omni cross-platform controls demo"
+          }
+        ]
+      }
+    ],
+    "controls": {
+      "http-url": {
+        "type": "textField",
+        "label": "Request URL",
+        "value": "https://jsonplaceholder.typicode.com/todos/1",
+        "placeholder": "https://example.com"
+      },
+      "http-method": {
+        "type": "comboBox",
+        "label": "HTTP method",
+        "options": [
+          "GET",
+          "POST",
+          "PUT",
+          "PATCH",
+          "DELETE",
+          "HEAD",
+          "OPTIONS"
+        ],
+        "selectedIndex": 0
+      },
+      "http-send": {
+        "type": "button",
+        "text": "Send request",
+        "clickedText": "Send request",
+        "actions": {
+          "click": {
+            "file": "actions.js",
+            "function": "sendHttpRequest"
+          }
+        }
+      },
+      "http-result": {
+        "type": "textArea",
+        "label": "Response",
+        "value": "",
+        "backgroundColor": "#eae9dd"
+      },
+      "file-open": {
+        "type": "button",
+        "text": "Open file",
+        "clickedText": "Open file",
+        "actions": {
+          "click": {
+            "file": "actions.js",
+            "function": "openFile"
+          }
+        }
+      },
+      "file-save": {
+        "type": "button",
+        "text": "Save response to file",
+        "clickedText": "Save response to file",
+        "actions": {
+          "click": {
+            "file": "actions.js",
+            "function": "saveFile"
+          }
+        }
+      },
+      "theme": {
+        "type": "comboBox",
+        "label": "Theme",
+        "options": [
+          "Light",
+          "Dark",
+          "System"
+        ],
+        "selectedIndex": 0
+      },
+      "name": {
+        "type": "textField",
+        "label": "Name",
+        "value": "Ada",
+        "placeholder": "Enter a name"
+      },
+      "notifications": {
+        "type": "checkbox",
+        "label": "Enable notifications",
+        "checked": true
+      },
+      "layout": {
+        "type": "radioGroup",
+        "label": "Layout",
+        "options": [
+          "Compact",
+          "Comfortable"
+        ],
+        "selectedIndex": 1
+      },
+      "volume": {
+        "type": "slider",
+        "label": "Volume",
+        "min": 0,
+        "max": 100,
+        "value": 65
+      },
+      "recent-items": {
+        "type": "list",
+        "label": "Recent items",
+        "options": [
+          "Document 1",
+          "Document 2",
+          "Document 3"
+        ],
+        "selectedIndex": 0
+      },
+      "scrollable-panel": {
+        "type": "scrollPanel",
+        "label": "Scrollable panel",
+        "height": 150,
+        "children": [
+          "scroll-item-1",
+          "scroll-item-2",
+          "scroll-item-3",
+          "scroll-item-4",
+          "scroll-item-5",
+          "scroll-item-6",
+          "scroll-item-7",
+          "scroll-item-8"
+        ]
+      },
+      "scroll-item-1": {
+        "type": "label",
+        "text": "Scrollable item 1"
+      },
+      "scroll-item-2": {
+        "type": "label",
+        "text": "Scrollable item 2"
+      },
+      "scroll-item-3": {
+        "type": "label",
+        "text": "Scrollable item 3"
+      },
+      "scroll-item-4": {
+        "type": "label",
+        "text": "Scrollable item 4"
+      },
+      "scroll-item-5": {
+        "type": "label",
+        "text": "Scrollable item 5"
+      },
+      "scroll-item-6": {
+        "type": "label",
+        "text": "Scrollable item 6"
+      },
+      "scroll-item-7": {
+        "type": "label",
+        "text": "Scrollable item 7"
+      },
+      "scroll-item-8": {
+        "type": "label",
+        "text": "Scrollable item 8"
+      }
+    }
+  }
+}

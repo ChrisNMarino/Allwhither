@@ -1,0 +1,24 @@
+{
+  "application": {
+    "id": "org.omni.keyviper",
+    "name": "Key Viper"
+  },
+  "includes": ["file-panel.omni", "entries-panel.omni"],
+  "scripts": ["keyviper.js"],
+  "ui": {
+    "window": {
+      "title": "Key Viper",
+      "width": 480,
+      "height": 800,
+      "backgroundColor": "#1B4332",
+      "layout": {
+        "type": "vertical",
+        "children": ["file-panel"]
+      }
+    },
+    "theme": {
+      "backgroundColor": "#4A4A4A"
+    },
+    "menus": []
+  }
+}

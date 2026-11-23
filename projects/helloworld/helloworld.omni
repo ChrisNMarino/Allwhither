@@ -1,0 +1,25 @@
+{
+  "application": {
+    "id": "org.omni.helloworld",
+    "name": "Hello World"
+  },
+  "ui": {
+    "window": {
+      "title": "Hello World",
+      "width": 800,
+      "height": 600,
+      "fullscreen": true,
+      "layout": {
+        "type": "center",
+        "children": ["hello-world"]
+      }
+    },
+    "menus": [],
+    "controls": {
+      "hello-world": {
+        "type": "label",
+        "text": "Hello World"
+      }
+    }
+  }
+}

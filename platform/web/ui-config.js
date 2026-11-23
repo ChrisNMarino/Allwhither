@@ -1,0 +1,324 @@
+import { normalizeResourcePath, resolveResourcePath } from "./resource-codec.js";
+
+function requireString(value, name) {
+  if (typeof value !== "string" || value.trim() === "") {
+    throw new Error(`${name} must be a non-empty string.`);
+  }
+  return value;
+}
+
+function isInt32(value) {
+  return Number.isInteger(value) && value >= -2147483648 && value <= 2147483647;
+}
+
+function requireOptions(value, name) {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new Error(`${name} must contain at least one option.`);
+  }
+  value.forEach((option, index) => requireString(option, `${name}[${index}]`));
+  return value;
+}
+
+function validateOptionalColor(value, name) {
+  if (value !== undefined && (typeof value !== "string" || !/^#[\da-f]{6}$/i.test(value))) {
+    throw new Error(`${name} must be a #RRGGBB color.`);
+  }
+}
+
+function validateControl(control) {
+  requireString(control.type, "control.type");
+  validateOptionalColor(control.backgroundColor, "control.backgroundColor");
+  validateOptionalColor(control.foregroundColor, "control.foregroundColor");
+  validateActions(control);
+
+  switch (control.type) {
+    case "label":
+      requireString(control.text, "label.text");
+      break;
+    case "button":
+      requireString(control.text, "button.text");
+      requireString(control.clickedText, "button.clickedText");
+      break;
+    case "comboBox":
+    case "radioGroup":
+    case "list": {
+      requireString(control.label, `${control.type}.label`);
+      const options = requireOptions(control.options, `${control.type}.options`);
+      if (
+        !isInt32(control.selectedIndex) ||
+        control.selectedIndex < 0 ||
+        control.selectedIndex >= options.length
+      ) {
+        throw new Error(`${control.type}.selectedIndex is out of range.`);
+      }
+      break;
+    }
+    case "textField":
+      requireString(control.label, "textField.label");
+      if (typeof control.value !== "string") {
+        throw new Error("textField.value must be a string.");
+      }
+      if (control.placeholder !== undefined && typeof control.placeholder !== "string") {
+        throw new Error("textField.placeholder must be a string.");
+      }
+      break;
+    case "textArea":
+      requireString(control.label, "textArea.label");
+      if (typeof control.value !== "string") {
+        throw new Error("textArea.value must be a string.");
+      }
+      break;
+    case "checkbox":
+      requireString(control.label, "checkbox.label");
+      if (typeof control.checked !== "boolean") {
+        throw new Error("checkbox.checked must be a boolean.");
+      }
+      break;
+    case "slider":
+      requireString(control.label, "slider.label");
+      if (
+        !isInt32(control.min) ||
+        !isInt32(control.max) ||
+        !isInt32(control.value) ||
+        control.min >= control.max ||
+        control.value < control.min ||
+        control.value > control.max
+      ) {
+        throw new Error("slider requires an integer value within its range.");
+      }
+      break;
+    case "scrollPanel":
+      requireString(control.label, "scrollPanel.label");
+      if (!isInt32(control.height) || control.height <= 0) {
+        throw new Error("scrollPanel.height must be a positive integer.");
+      }
+      if (!Array.isArray(control.children)) {
+        throw new Error("scrollPanel.children must be an array.");
+      }
+      control.children.forEach((id, index) =>
+        requireString(id, `scrollPanel.children[${index}]`),
+      );
+      break;
+    case "panel":
+      requireString(control.label, "panel.label");
+      if (!Array.isArray(control.children)) {
+        throw new Error("panel.children must be an array.");
+      }
+      control.children.forEach((id, index) =>
+        requireString(id, `panel.children[${index}]`),
+      );
+      break;
+    default:
+      throw new Error(`Unsupported control type: ${control.type}`);
+  }
+}
+
+function validateActions(control) {
+  if (control.actions === undefined) {
+    return;
+  }
+  if (
+    control.actions === null ||
+    typeof control.actions !== "object" ||
+    Array.isArray(control.actions)
+  ) {
+    throw new Error("control.actions must be an object.");
+  }
+
+  const eventTypes = {
+    button: ["click"],
+    comboBox: ["change"],
+    textField: ["input"],
+    textArea: ["input"],
+    checkbox: ["change"],
+    radioGroup: ["change"],
+    slider: ["input"],
+    list: ["change"],
+  };
+  for (const [eventType, action] of Object.entries(control.actions)) {
+    if (!eventTypes[control.type]?.includes(eventType)) {
+      throw new Error(`${control.type} does not support the '${eventType}' action event.`);
+    }
+    if (action === null || typeof action !== "object" || Array.isArray(action)) {
+      throw new Error(`${eventType} action must specify a file and function.`);
+    }
+    const file = requireString(action.file, `${eventType}.action.file`);
+    if (
+      !file.endsWith(".js") ||
+      file.startsWith("/") ||
+      /^[a-z]:/i.test(file) ||
+      file.replaceAll("\\", "/").split("/").includes("..")
+    ) {
+      throw new Error("Action files must be relative .js paths without parent segments.");
+    }
+    const functionName = requireString(action.function, `${eventType}.action.function`);
+    if (!/^[A-Za-z_$][\w$]*$/.test(functionName)) {
+      throw new Error("Action function must be a JavaScript identifier.");
+    }
+  }
+}
+
+function validateControlTree(order, controls) {
+  const visited = new Set();
+  const visiting = new Set();
+
+  function visit(id) {
+    requireString(id, "control id");
+    if (!Object.hasOwn(controls, id)) {
+      throw new Error(`Unknown control id: ${id}`);
+    }
+    if (visiting.has(id)) {
+      throw new Error(`Control hierarchy contains a cycle at: ${id}`);
+    }
+    if (visited.has(id)) {
+      throw new Error(`Control id is referenced more than once: ${id}`);
+    }
+
+    visiting.add(id);
+    const control = controls[id];
+    validateControl(control);
+    if (control.type === "scrollPanel" || control.type === "panel") {
+      control.children.forEach(visit);
+    }
+    visiting.delete(id);
+    visited.add(id);
+  }
+
+  order.forEach(visit);
+  for (const id of Object.keys(controls)) {
+    if (!visited.has(id) && controls[id].type === "panel") {
+      visit(id);
+    }
+  }
+  if (visited.size !== Object.keys(controls).length) {
+    throw new Error("Every control must be reachable from window.layout.children.");
+  }
+}
+
+function validateMenus(menus) {
+  if (!Array.isArray(menus)) {
+    throw new Error("menus must be an array.");
+  }
+  menus.forEach((menu) => {
+    requireString(menu.label, "menu.label");
+    if (!Array.isArray(menu.items) || menu.items.length === 0) {
+      throw new Error("menu.items must contain at least one item.");
+    }
+    menu.items.forEach((item) => {
+      requireString(item.text, "menu item.text");
+      requireString(item.message, "menu item.message");
+    });
+  });
+}
+
+export function validateUi(ui) {
+  const layout = ui?.window?.layout;
+  if (
+    ui === null ||
+    typeof ui !== "object" ||
+    Array.isArray(ui) ||
+    layout === null ||
+    typeof layout !== "object" ||
+    !["vertical", "center"].includes(layout.type) ||
+    !Array.isArray(layout.children) ||
+    typeof ui.window?.title !== "string" ||
+    !isInt32(ui.window.width) ||
+    ui.window.width <= 0 ||
+    !isInt32(ui.window.height) ||
+    ui.window.height <= 0 ||
+    ui.controls === null ||
+    typeof ui.controls !== "object" ||
+    Array.isArray(ui.controls)
+  ) {
+    throw new Error("The UI definition has missing or invalid values.");
+  }
+  if (ui.window.fullscreen !== undefined && typeof ui.window.fullscreen !== "boolean") {
+    throw new Error("window.fullscreen must be a boolean.");
+  }
+  validateOptionalColor(ui.window.backgroundColor, "window.backgroundColor");
+  validateOptionalColor(ui.window.foregroundColor, "window.foregroundColor");
+  if (ui.theme !== undefined) {
+    if (ui.theme === null || typeof ui.theme !== "object" || Array.isArray(ui.theme)) {
+      throw new Error("theme must be an object.");
+    }
+    validateOptionalColor(ui.theme.backgroundColor, "theme.backgroundColor");
+    validateOptionalColor(ui.theme.foregroundColor, "theme.foregroundColor");
+  }
+  validateControlTree(layout.children, ui.controls);
+  validateMenus(ui.menus);
+  return ui;
+}
+
+export function loadConfiguration(store, resourcePath, includeStack = new Set()) {
+  const normalizedPath = normalizeResourcePath(resourcePath);
+  if (includeStack.has(normalizedPath)) {
+    throw new Error(`Configuration include cycle at: ${normalizedPath}`);
+  }
+  const nextStack = new Set(includeStack);
+  nextStack.add(normalizedPath);
+
+  const config = JSON.parse(store.readText(normalizedPath));
+  if (config === null || typeof config !== "object" || Array.isArray(config)) {
+    throw new Error(`Configuration ${normalizedPath} must contain a JSON object.`);
+  }
+
+  let merged = {};
+  const scripts = [];
+  if (config.includes !== undefined) {
+    if (!Array.isArray(config.includes)) {
+      throw new Error("includes must be an array.");
+    }
+    for (const include of config.includes) {
+      requireString(include, "includes[]");
+      const included = loadConfiguration(
+        store,
+        resolveResourcePath(normalizedPath, include),
+        nextStack,
+      );
+      appendScripts(scripts, included.scripts);
+      merged = mergeObjects(merged, included);
+    }
+  }
+  merged = mergeObjects(merged, config);
+  appendScripts(scripts, readScripts(config.scripts, normalizedPath));
+  merged.scripts = scripts;
+  return merged;
+}
+
+function readScripts(value, basePath) {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) {
+    throw new Error("scripts must be an array.");
+  }
+  return value.map((item) => {
+    if (typeof item !== "string" || item.trim() === "") {
+      throw new Error("scripts must contain non-empty paths.");
+    }
+    const resolved = resolveResourcePath(basePath, item);
+    if (!resolved.endsWith(".js")) {
+      throw new Error("Script files must be relative .js paths without parent segments.");
+    }
+    return resolved;
+  });
+}
+
+function appendScripts(target, more) {
+  for (const path of more ?? []) {
+    if (!target.includes(path)) target.push(path);
+  }
+}
+
+function isMergeObject(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function mergeObjects(target, source) {
+  const merged = { ...target };
+  for (const [key, value] of Object.entries(source)) {
+    if (key === "includes" || key === "scripts") continue;
+    merged[key] = isMergeObject(merged[key]) && isMergeObject(value)
+      ? mergeObjects(merged[key], value)
+      : value;
+  }
+  return merged;
+}

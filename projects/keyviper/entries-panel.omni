@@ -1,0 +1,99 @@
+{
+    "ui": {
+        "controls": {
+            "entries-panel": {
+                "type": "panel",
+                "label": "Entries",
+                "children": [
+                    "vault-caption",
+                    "entry-list",
+                    "entry-title",
+                    "entry-username",
+                    "entry-password",
+                    "entry-notes",
+                    "new-entry",
+                    "save-entry",
+                    "delete-entry",
+                    "save-vault",
+                    "lock-vault"
+                ]
+            },
+            "vault-caption": {
+                "type": "label",
+                "text": "No vault"
+            },
+            "entry-list": {
+                "type": "list",
+                "label": "Saved passwords",
+                "options": ["(no entries)"],
+                "selectedIndex": 0,
+                "actions": {
+                    "change": { "file": "entries-panel.js", "function": "onEntrySelected" }
+                }
+            },
+            "entry-title": {
+                "type": "textField",
+                "label": "Title",
+                "value": "",
+                "placeholder": "Example: Mail"
+            },
+            "entry-username": {
+                "type": "textField",
+                "label": "Username",
+                "value": "",
+                "placeholder": "Name or email"
+            },
+            "entry-password": {
+                "type": "textField",
+                "label": "Password",
+                "value": "",
+                "password": true
+            },
+            "entry-notes": {
+                "type": "textArea",
+                "label": "Notes",
+                "value": ""
+            },
+            "new-entry": {
+                "type": "button",
+                "text": "New",
+                "clickedText": "New",
+                "actions": {
+                    "click": { "file": "entries-panel.js", "function": "newEntry" }
+                }
+            },
+            "save-entry": {
+                "type": "button",
+                "text": "Save entry",
+                "clickedText": "Save entry",
+                "actions": {
+                    "click": { "file": "entries-panel.js", "function": "saveEntry" }
+                }
+            },
+            "delete-entry": {
+                "type": "button",
+                "text": "Delete",
+                "clickedText": "Delete",
+                "actions": {
+                    "click": { "file": "entries-panel.js", "function": "deleteEntry" }
+                }
+            },
+            "save-vault": {
+                "type": "button",
+                "text": "Save file",
+                "clickedText": "Save file",
+                "actions": {
+                    "click": { "file": "entries-panel.js", "function": "saveVault" }
+                }
+            },
+            "lock-vault": {
+                "type": "button",
+                "text": "Lock",
+                "clickedText": "Lock",
+                "actions": {
+                    "click": { "file": "entries-panel.js", "function": "lockVault" }
+                }
+            }
+        }
+    }
+}

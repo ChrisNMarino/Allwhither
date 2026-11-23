@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OmniProject Condition="'$(OmniProject)' == ''">example</OmniProject>
+    <AssemblyName>$(OmniProject)</AssemblyName>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Jint" Version="4.2.0" />
+    <OmniProjectFiles Include="../../projects/$(OmniProject)/**/*.omni" />
+    <OmniProjectFiles Include="../../projects/$(OmniProject)/**/*.json" />
+    <OmniProjectFiles Include="../../projects/$(OmniProject)/**/*.js" />
+  </ItemGroup>
+  <Target Name="ValidateOmniProject" BeforeTargets="PrepareForBuild">
+    <Error Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(OmniProject)', '^[A-Za-z0-9][A-Za-z0-9._-]*$')) != 'True'"
+           Text="OmniProject must be a project directory name." />
+    <Error Condition="!Exists('$(MSBuildThisFileDirectory)../../projects/$(OmniProject)/$(OmniProject).omni')"
+           Text="Missing projects/$(OmniProject)/$(OmniProject).omni." />
+  </Target>
+  <Target Name="GenerateEmbeddedResources"
+          BeforeTargets="CoreCompile"
+          Inputs="$(MSBuildThisFileDirectory)../../tools/embed_resources.py;@(OmniProjectFiles)"
+          Outputs="$(IntermediateOutputPath)EmbeddedResourceData.$(OmniProject).g.cs">
+    <Exec Command="python3 &quot;$(MSBuildThisFileDirectory)../../tools/embed_resources.py&quot; --platform csharp --project-dir &quot;$(MSBuildThisFileDirectory)../../projects/$(OmniProject)&quot; --output &quot;$(IntermediateOutputPath)EmbeddedResourceData.$(OmniProject).g.cs&quot;" />
+  </Target>
+  <Target Name="IncludeEmbeddedResources" BeforeTargets="CoreCompile" DependsOnTargets="GenerateEmbeddedResources">
+    <ItemGroup>
+      <Compile Include="$(IntermediateOutputPath)EmbeddedResourceData.$(OmniProject).g.cs" />
+      <FileWrites Include="$(IntermediateOutputPath)EmbeddedResourceData.$(OmniProject).g.cs" />
+    </ItemGroup>
+  </Target>
+  <Target Name="RemoveLooseOmniFiles" AfterTargets="Build">
+    <ItemGroup>
+      <LooseOmniFiles Include="$(TargetDir)**/*.omni" />
+    </ItemGroup>
+    <Delete Files="@(LooseOmniFiles)" />
+    <RemoveDir Directories="$(TargetDir)scripts" />
+  </Target>
+</Project>

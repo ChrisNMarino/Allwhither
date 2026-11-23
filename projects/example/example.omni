@@ -1,0 +1,7 @@
+{
+  "application": {
+    "id": "org.omni.example",
+    "name": "Omni example"
+  },
+  "includes": ["ui.omni"]
+}
