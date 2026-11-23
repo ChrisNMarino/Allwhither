@@ -1,5 +1,5 @@
-#ifndef OMNI_UI_CONFIG_H
-#define OMNI_UI_CONFIG_H
+#ifndef ALLWHITHER_UI_CONFIG_H
+#define ALLWHITHER_UI_CONFIG_H
 
 #include <json-glib/json-glib.h>
 
@@ -11,6 +11,9 @@ gboolean ui_config_validate(JsonObject *root,
                             JsonArray **menus,
                             JsonObject **controls,
                             JsonArray **order);
+
+gboolean ui_layout_validate(JsonObject *layout, gboolean allow_center);
+const char *ui_layout_resolve(JsonObject *layout, int width);
 
 gboolean ui_read_string_value(JsonObject *object, const char *member, const char **value);
 gboolean ui_read_string(JsonObject *object, const char *member, const char **value);

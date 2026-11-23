@@ -1,4 +1,4 @@
-package org.omni.starter
+package org.allwhither.starter
 
 import android.os.Handler
 import android.os.Looper
@@ -388,7 +388,7 @@ class HttpClientApi {
                 val result = success ?: return
                 onFulfilled?.call(context, scope, scope, arrayOf(toResponse(context, result)))
             } catch (exception: Exception) {
-                Log.w("omni", "JavaScript HTTP callback failed", exception)
+                Log.w("allwhither", "JavaScript HTTP callback failed", exception)
             } finally {
                 Context.exit()
             }
@@ -414,7 +414,7 @@ class HttpClientApi {
         private const val DEFAULT_TIMEOUT_MS = 30000
 
         private val executor: ExecutorService = Executors.newCachedThreadPool { runnable ->
-            Thread(runnable, "omni-http").apply { isDaemon = true }
+            Thread(runnable, "allwhither-http").apply { isDaemon = true }
         }
     }
 }

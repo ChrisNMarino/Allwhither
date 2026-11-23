@@ -258,7 +258,7 @@ control_renderer_style_widget(GtkWidget *widget,
         return;
     }
     static guint style_id;
-    char *class_name = g_strdup_printf("omni-color-%u", ++style_id);
+    char *class_name = g_strdup_printf("allwhither-color-%u", ++style_id);
     GString *css = g_string_new("");
     g_string_append_printf(css, ".%s {", class_name);
     if (background != NULL) {
@@ -294,10 +294,10 @@ remember_list_colors(GtkWidget *widget, const char *background, const char *fore
         return;
     }
     if (background != NULL) {
-        g_object_set_data_full(G_OBJECT(widget), "omni-bg", g_strdup(background), g_free);
+        g_object_set_data_full(G_OBJECT(widget), "allwhither-bg", g_strdup(background), g_free);
     }
     if (foreground != NULL) {
-        g_object_set_data_full(G_OBJECT(widget), "omni-fg", g_strdup(foreground), g_free);
+        g_object_set_data_full(G_OBJECT(widget), "allwhither-fg", g_strdup(foreground), g_free);
     }
 }
 
@@ -307,7 +307,7 @@ style_control_tree(GtkWidget *widget,
                    const char *foreground,
                    gboolean is_root)
 {
-    if (!is_root && g_object_get_data(G_OBJECT(widget), "omni-control-root") != NULL) {
+    if (!is_root && g_object_get_data(G_OBJECT(widget), "allwhither-control-root") != NULL) {
         return;
     }
     if (GTK_IS_LIST_BOX_ROW(widget)) {
@@ -363,6 +363,82 @@ resolve_control_colors(JsonObject *spec, const char **background, const char **f
     }
 }
 
+static GPtrArray *responsive_boxes = NULL;
+static int responsive_width = 0;
+
+typedef struct {
+    GtkWidget *box;
+    JsonObject *layout;
+} ResponsiveBox;
+
+static void
+apply_layout(ResponsiveBox *entry)
+{
+    gboolean horizontal =
+        g_str_equal(ui_layout_resolve(entry->layout, responsive_width), "horizontal");
+    gtk_orientable_set_orientation(GTK_ORIENTABLE(entry->box),
+        horizontal ? GTK_ORIENTATION_HORIZONTAL : GTK_ORIENTATION_VERTICAL);
+    gtk_box_set_homogeneous(GTK_BOX(entry->box), horizontal);
+    for (GtkWidget *child = gtk_widget_get_first_child(entry->box);
+         child != NULL; child = gtk_widget_get_next_sibling(child)) {
+        gboolean automatic =
+            g_object_get_data(G_OBJECT(child), "allwhither-auto-hexpand") != NULL;
+        if (horizontal && !gtk_widget_get_hexpand(child)) {
+            gtk_widget_set_hexpand(child, TRUE);
+            g_object_set_data(G_OBJECT(child), "allwhither-auto-hexpand", GINT_TO_POINTER(1));
+        } else if (!horizontal && automatic) {
+            gtk_widget_set_hexpand(child, FALSE);
+            g_object_set_data(G_OBJECT(child), "allwhither-auto-hexpand", NULL);
+        }
+        if (horizontal || automatic) {
+            gtk_widget_set_valign(child, horizontal ? GTK_ALIGN_START : GTK_ALIGN_FILL);
+        }
+    }
+}
+
+static void
+free_responsive_box(gpointer data)
+{
+    ResponsiveBox *entry = data;
+    json_object_unref(entry->layout);
+    g_free(entry);
+}
+
+static void
+on_responsive_box_destroyed(gpointer data, GObject *where_the_object_was)
+{
+    for (guint index = 0; index < responsive_boxes->len; index++) {
+        ResponsiveBox *entry = g_ptr_array_index(responsive_boxes, index);
+        if ((GObject *) entry->box == where_the_object_was) {
+            g_ptr_array_remove_index_fast(responsive_boxes, index);
+            return;
+        }
+    }
+}
+
+void
+control_renderer_track_layout(GtkWidget *box, JsonObject *layout)
+{
+    if (responsive_boxes == NULL) {
+        responsive_boxes = g_ptr_array_new_with_free_func(free_responsive_box);
+    }
+    ResponsiveBox *entry = g_new0(ResponsiveBox, 1);
+    entry->box = box;
+    entry->layout = json_object_ref(layout);
+    g_ptr_array_add(responsive_boxes, entry);
+    g_object_weak_ref(G_OBJECT(box), on_responsive_box_destroyed, NULL);
+    apply_layout(entry);
+}
+
+void
+control_renderer_update_layouts(int width)
+{
+    responsive_width = width;
+    for (guint index = 0; responsive_boxes != NULL && index < responsive_boxes->len; index++) {
+        apply_layout(g_ptr_array_index(responsive_boxes, index));
+    }
+}
+
 static void
 append_control(GtkWidget *parent,
                GtkWidget *control,
@@ -373,7 +449,7 @@ append_control(GtkWidget *parent,
     const char *background = NULL;
     const char *foreground = NULL;
     resolve_control_colors(spec, &background, &foreground);
-    g_object_set_data(G_OBJECT(control), "omni-control-root", GINT_TO_POINTER(1));
+    g_object_set_data(G_OBJECT(control), "allwhither-control-root", GINT_TO_POINTER(1));
     if (background != NULL || foreground != NULL) {
         style_control_tree(control, background, foreground, TRUE);
     }
@@ -611,6 +687,26 @@ control_renderer_render(const char *control_id,
         }
         gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scroll), child_box);
         gtk_box_append(GTK_BOX(box), scroll);
+        append_control(parent, box, spec, control_id, runtime);
+        return TRUE;
+    }
+    if (g_str_equal(type, "group")) {
+        JsonArray *children;
+        ui_read_array(spec, "children", &children);
+        GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
+        for (guint index = 0; index < json_array_get_length(children); index++) {
+            const char *child_id =
+                json_node_get_string(json_array_get_element(children, index));
+            JsonNode *child_node = json_object_get_member(controls, child_id);
+            if (!control_renderer_render(child_id, json_node_get_object(child_node),
+                                         controls, box, status, runtime)) {
+                return FALSE;
+            }
+        }
+        if (json_object_has_member(spec, "layout")) {
+            control_renderer_track_layout(
+                box, json_object_get_object_member(spec, "layout"));
+        }
         append_control(parent, box, spec, control_id, runtime);
         return TRUE;
     }

@@ -520,7 +520,7 @@ http_client_new(JSGlobalContextRef context)
     client->context = context;
     client->session = soup_session_new();
     JSClassDefinition definition = kJSClassDefinitionEmpty;
-    definition.className = "OmniHttpClient";
+    definition.className = "AllwhitherHttpClient";
     definition.staticFunctions = http_functions;
     JSClassRef klass = JSClassCreate(&definition);
     client->object = JSObjectMake(context, klass, client);

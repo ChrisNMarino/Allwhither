@@ -1,6 +1,6 @@
 using System.Text.Json.Nodes;
 
-namespace Omni.Windows;
+namespace Allwhither.Windows;
 
 internal static class ConfigurationLoader
 {

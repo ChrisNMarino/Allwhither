@@ -1,6 +1,6 @@
 {
   "application": {
-    "id": "org.omni.helloworld",
+    "id": "org.allwhither.helloworld",
     "name": "Hello World"
   },
   "ui": {

@@ -8,7 +8,7 @@ using Jint.Native.Object;
 using Jint.Runtime;
 using Jint.Runtime.Descriptors;
 
-namespace Omni.Windows;
+namespace Allwhither.Windows;
 
 public sealed class HttpClientApi
 {

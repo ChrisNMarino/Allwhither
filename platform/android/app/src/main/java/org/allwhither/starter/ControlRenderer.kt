@@ -1,4 +1,4 @@
-package org.omni.starter
+package org.allwhither.starter
 
 import android.app.Activity
 import android.content.res.ColorStateList
@@ -201,6 +201,15 @@ internal class ControlRenderer(
                     render(children.getString(index), controlRoot)
                 }
             }
+            "group" -> {
+                controlRoot.orientation = uiConfiguration.orientationFor(
+                    control.optJSONObject("layout"), activity.resources.configuration.screenWidthDp
+                )
+                val children = control.getJSONArray("children")
+                for (index in 0 until children.length()) {
+                    render(children.getString(index), controlRoot)
+                }
+            }
             "scrollPanel" -> {
                 val label = uiConfiguration.requiredString(control, "label")
                 controlRoot.addView(fieldLabel(label), matchWrap())
@@ -231,7 +240,14 @@ internal class ControlRenderer(
             applyColors(controlRoot, palette.background, palette.foreground)
         }
         dom.register(controlId, controlRoot)
-        parent.addView(controlRoot, if (centered && type == "label") wrapWrap() else matchWrap())
+        val params = when {
+            parent.orientation == LinearLayout.HORIZONTAL -> LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f
+            )
+            centered && type == "label" -> wrapWrap()
+            else -> matchWrap()
+        }
+        parent.addView(controlRoot, params)
     }
 
     private fun paletteFor(control: JSONObject): OptionPalette? {

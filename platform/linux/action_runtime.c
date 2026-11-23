@@ -9,8 +9,8 @@
 #include <JavaScriptCore/JavaScript.h>
 #include <string.h>
 
-#ifndef OMNI_PROJECT_NAME
-#define OMNI_PROJECT_NAME "example"
+#ifndef ALLWHITHER_PROJECT_NAME
+#define ALLWHITHER_PROJECT_NAME "example"
 #endif
 
 struct _ActionRuntime {
@@ -678,8 +678,8 @@ apply_options(ActionRuntime *runtime, const char *id, GPtrArray *items, int sele
             GtkWidget *row_label = gtk_label_new(g_ptr_array_index(items, index));
             gtk_widget_set_halign(row_label, GTK_ALIGN_START);
             gtk_list_box_append(GTK_LIST_BOX(list), row_label);
-            const char *row_background = g_object_get_data(G_OBJECT(list), "omni-bg");
-            const char *row_foreground = g_object_get_data(G_OBJECT(list), "omni-fg");
+            const char *row_background = g_object_get_data(G_OBJECT(list), "allwhither-bg");
+            const char *row_foreground = g_object_get_data(G_OBJECT(list), "allwhither-fg");
             GtkWidget *row = gtk_widget_get_parent(row_label);
             if (row != NULL) {
                 control_renderer_style_widget(row, row_background, row_foreground);
@@ -949,7 +949,7 @@ evaluate_script(ActionRuntime *runtime,
                 gboolean action,
                 GError **error)
 {
-    char *normalized = omni_resource_normalize(file, error);
+    char *normalized = allwhither_resource_normalize(file, error);
     if (normalized == NULL) {
         return FALSE;
     }
@@ -964,7 +964,7 @@ evaluate_script(ActionRuntime *runtime,
     }
     if (!g_hash_table_contains(runtime->loaded_files, normalized)) {
         gsize length = 0;
-        char *source = omni_resource_read(normalized, &length, error);
+        char *source = allwhither_resource_read(normalized, &length, error);
         if (source == NULL) {
             g_free(normalized);
             return FALSE;
@@ -1029,7 +1029,7 @@ action_runtime_new(JsonObject *controls,
 
     JSClassDefinition definition = kJSClassDefinitionEmpty;
     definition.staticFunctions = dom_functions;
-    definition.className = "OmniDOM";
+    definition.className = "AllwhitherDOM";
     JSClassRef dom_class = JSClassCreate(&definition);
     runtime->dom = JSObjectMake(runtime->context, dom_class, runtime);
     JSStringRef dom_name = JSStringCreateWithUTF8CString("dom");
@@ -1041,7 +1041,7 @@ action_runtime_new(JsonObject *controls,
     JSClassRelease(dom_class);
 
     JSClassDefinition api_definition = kJSClassDefinitionEmpty;
-    api_definition.className = "OmniAPI";
+    api_definition.className = "AllwhitherAPI";
     api_definition.staticFunctions = api_functions;
     JSClassRef api_class = JSClassCreate(&api_definition);
     JSObjectRef api = JSObjectMake(runtime->context, api_class, runtime);
@@ -1060,7 +1060,7 @@ action_runtime_new(JsonObject *controls,
                         kJSPropertyAttributeReadOnly, NULL);
     JSStringRelease(http_name);
 
-    runtime->file = file_client_new(runtime->context, OMNI_PROJECT_NAME);
+    runtime->file = file_client_new(runtime->context, ALLWHITHER_PROJECT_NAME);
     JSStringRef file_name = JSStringCreateWithUTF8CString("file");
     JSObjectSetProperty(runtime->context, api, file_name,
                         file_client_js_object(runtime->file),

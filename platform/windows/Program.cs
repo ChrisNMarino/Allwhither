@@ -2,7 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Windows.Forms;
 
-namespace Omni.Windows;
+namespace Allwhither.Windows;
 
 internal static class Program
 {
@@ -13,7 +13,7 @@ internal static class Program
     {
         ApplicationConfiguration.Initialize();
 
-        string configPath = $"{ProjectName}.omni";
+        string configPath = $"{ProjectName}.json";
         try
         {
             JsonObject config = ConfigurationLoader.Load(configPath);
@@ -22,10 +22,7 @@ internal static class Program
             JsonElement window = UiDefinition.GetObject(ui, "window");
             JsonElement layout = UiDefinition.GetObject(window, "layout");
             string layoutType = UiDefinition.GetString(layout, "type");
-            if (layoutType is not ("vertical" or "center"))
-            {
-                throw new InvalidDataException("window.layout.type must be 'vertical' or 'center'.");
-            }
+            UiDefinition.ValidateLayout(layout, true, "window.layout");
 
             string title = UiDefinition.GetString(window, "title");
             int width = UiDefinition.GetPositiveInt(window, "width");
@@ -139,15 +136,34 @@ internal static class Program
                     AutoSize = true,
                     Margin = new Padding(3, 3, 3, 10)
                 });
+                var body = new FlowLayoutPanel
+                {
+                    AutoSize = true,
+                    AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                    FlowDirection = FlowDirection.TopDown,
+                    WrapContents = false,
+                    Margin = new Padding(0)
+                };
                 foreach (JsonElement controlId in controlOrder.EnumerateArray())
                 {
-                    controlList.Controls.Add(controlRenderer.Render(controlId.GetString()!));
+                    body.Controls.Add(controlRenderer.Render(controlId.GetString()!));
                 }
+                controlRenderer.RegisterGroup(body, layout);
+                controlList.Controls.Add(body);
                 dom.AttachMount(controlList, controlRenderer.Render);
                 form.Controls.Add(controlList);
                 form.Controls.Add(statusStrip);
                 form.MainMenuStrip = MenuRenderer.Create(menus, status);
                 form.Controls.Add(form.MainMenuStrip);
+                void Relayout()
+                {
+                    controlList.SuspendLayout();
+                    controlRenderer.ApplyWidth(
+                        controlList, Math.Max(200, form.ClientSize.Width - 48), form.ClientSize.Width);
+                    controlList.ResumeLayout(true);
+                }
+                form.ClientSizeChanged += (_, _) => Relayout();
+                Relayout();
             }
             PaintChrome(form, statusStrip, status, chrome);
             Application.Run(form);
@@ -155,7 +171,7 @@ internal static class Program
         catch (Exception exception) when (
             exception is IOException or JsonException or InvalidDataException)
         {
-            MessageBox.Show(exception.Message, "omni configuration error",
+            MessageBox.Show(exception.Message, "allwhither configuration error",
                 MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }

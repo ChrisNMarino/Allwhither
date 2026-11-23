@@ -1,25 +1,17 @@
 {
   "ui": {
     "window": {
-      "title": "Omni Controls",
+      "title": "Allwhither Controls",
       "width": 480,
       "height": 960,
       "layout": {
         "type": "vertical",
+        "media": [
+          { "minWidth": 720, "type": "horizontal" }
+        ],
         "children": [
-          "http-url",
-          "http-method",
-          "http-send",
-          "http-result",
-          "file-open",
-          "file-save",
-          "theme",
-          "name",
-          "notifications",
-          "layout",
-          "volume",
-          "recent-items",
-          "scrollable-panel"
+          "http-group",
+          "settings-group"
         ]
       }
     },
@@ -42,12 +34,37 @@
         "items": [
           {
             "text": "About",
-            "message": "Omni cross-platform controls demo"
+            "message": "Allwhither cross-platform controls demo"
           }
         ]
       }
     ],
     "controls": {
+      "http-group": {
+        "type": "group",
+        "layout": { "type": "vertical" },
+        "children": [
+          "http-url",
+          "http-method",
+          "http-send",
+          "http-result",
+          "file-open",
+          "file-save"
+        ]
+      },
+      "settings-group": {
+        "type": "group",
+        "layout": { "type": "vertical" },
+        "children": [
+          "theme",
+          "name",
+          "notifications",
+          "layout",
+          "volume",
+          "recent-items",
+          "scrollable-panel"
+        ]
+      },
       "http-url": {
         "type": "textField",
         "label": "Request URL",

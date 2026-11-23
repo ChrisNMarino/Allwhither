@@ -328,7 +328,7 @@ crypto_client_new(JSGlobalContextRef context)
     client->context = context;
 
     JSClassDefinition crypto_def = kJSClassDefinitionEmpty;
-    crypto_def.className = "OmniCrypto";
+    crypto_def.className = "AllwhitherCrypto";
     crypto_def.staticFunctions = crypto_functions;
     JSClassRef crypto_class = JSClassCreate(&crypto_def);
     client->object = JSObjectMake(context, crypto_class, client);

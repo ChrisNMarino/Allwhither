@@ -1,5 +1,5 @@
-#ifndef OMNI_CRYPTO_CLIENT_H
-#define OMNI_CRYPTO_CLIENT_H
+#ifndef ALLWHITHER_CRYPTO_CLIENT_H
+#define ALLWHITHER_CRYPTO_CLIENT_H
 
 #include <JavaScriptCore/JavaScript.h>
 

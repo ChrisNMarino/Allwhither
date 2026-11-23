@@ -1,4 +1,5 @@
 import { effectiveColors } from "./colors.js";
+import { resolveLayoutType } from "./ui-config.js";
 
 function labeledControl(label, control) {
   const wrapper = document.createElement("label");
@@ -10,7 +11,7 @@ function labeledControl(label, control) {
 }
 
 function paintColors(element, background, foreground, isRoot) {
-  if (!isRoot && element.dataset.omniControl === "true") {
+  if (!isRoot && element.dataset.allwhitherControl === "true") {
     return;
   }
   if (background) {
@@ -30,13 +31,13 @@ export function renderControl(controlId, controls, status, actionRuntime, dom, t
   const element = renderControlContent(
     controlId, controls, status, actionRuntime, dom, theme,
   );
-  element.dataset.omniControl = "true";
+  element.dataset.allwhitherControl = "true";
   dom.register(controlId, element);
   const colors = effectiveColors(control, theme);
   if (colors.background || colors.foreground) {
     if (colors.foreground) {
-      element.style.setProperty("--omni-placeholder", colors.foreground);
-      element.classList.add("omni-colored");
+      element.style.setProperty("--allwhither-placeholder", colors.foreground);
+      element.classList.add("allwhither-colored");
     }
     paintColors(element, colors.background, colors.foreground, true);
   }
@@ -207,6 +208,17 @@ function renderControlContent(controlId, controls, status, actionRuntime, dom, t
       panel.append(heading, children);
       return panel;
     }
+    case "group": {
+      const group = document.createElement("div");
+      group.className = "control-list control-group";
+      control.children.forEach((childId) => {
+        group.append(renderControl(
+          childId, controls, status, actionRuntime, dom, theme,
+        ));
+      });
+      trackResponsiveLayout(group, control.layout ?? { type: "vertical" });
+      return group;
+    }
     case "scrollPanel": {
       const panel = document.createElement("section");
       panel.className = "scroll-panel";
@@ -229,6 +241,31 @@ function renderControlContent(controlId, controls, status, actionRuntime, dom, t
 }
 
 let nextRadioId = 0;
+
+const responsiveElements = [];
+
+export function trackResponsiveLayout(element, layout) {
+  responsiveElements.push({ element, layout });
+  applyResponsiveLayout({ element, layout }, window.innerWidth);
+}
+
+function applyResponsiveLayout({ element, layout }, width) {
+  const type = resolveLayoutType(layout, width);
+  element.classList.toggle("horizontal", type === "horizontal");
+  element.classList.toggle("centered", type === "center");
+}
+
+export function updateResponsiveLayouts() {
+  const width = window.innerWidth;
+  for (let i = responsiveElements.length - 1; i >= 0; i--) {
+    if (!responsiveElements[i].element.isConnected && responsiveElements[i].seen) {
+      responsiveElements.splice(i, 1);
+      continue;
+    }
+    responsiveElements[i].seen = responsiveElements[i].element.isConnected;
+    applyResponsiveLayout(responsiveElements[i], width);
+  }
+}
 
 export function renderMenus(menus, status, menuBar) {
   menus.forEach((menu) => {

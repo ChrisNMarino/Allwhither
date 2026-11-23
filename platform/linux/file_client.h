@@ -1,5 +1,5 @@
-#ifndef OMNI_FILE_CLIENT_H
-#define OMNI_FILE_CLIENT_H
+#ifndef ALLWHITHER_FILE_CLIENT_H
+#define ALLWHITHER_FILE_CLIENT_H
 
 #include <gtk/gtk.h>
 #include <JavaScriptCore/JavaScript.h>

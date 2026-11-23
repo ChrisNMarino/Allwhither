@@ -3,29 +3,30 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
-val omniProject = providers.gradleProperty("omniProject").orElse("example").get()
+val allwhitherProject = providers.gradleProperty("allwhitherProject").orElse("example").get()
 val repoDir = rootProject.layout.projectDirectory.dir("../..")
-val projectEntry = repoDir.file("projects/$omniProject/$omniProject.omni").asFile
-require(omniProject.matches(Regex("^[A-Za-z0-9][A-Za-z0-9._-]*$"))) {
-    "omniProject must be a project directory name."
+val pythonExe = if (System.getProperty("os.name").startsWith("Windows")) "python" else "python3"
+val projectEntry = repoDir.file("projects/$allwhitherProject/$allwhitherProject.json").asFile
+require(allwhitherProject.matches(Regex("^[A-Za-z0-9][A-Za-z0-9._-]*$"))) {
+    "allwhitherProject must be a project directory name."
 }
 require(projectEntry.isFile) {
     "Missing ${projectEntry.path}."
 }
 val generateEmbeddedResources = tasks.register<Exec>("generateEmbeddedResources") {
     val embedScript = repoDir.file("tools/embed_resources.py")
-    val projectDirectory = repoDir.dir("projects/$omniProject")
+    val projectDirectory = repoDir.dir("projects/$allwhitherProject")
     val generatedFile = layout.buildDirectory.file(
-        "generated/omniEmbedded/org/omni/starter/EmbeddedResourceData.kt")
+        "generated/allwhitherEmbedded/org/allwhither/starter/EmbeddedResourceData.kt")
     inputs.file(embedScript)
     inputs.dir(projectDirectory)
     outputs.file(generatedFile)
     doFirst {
         generatedFile.get().asFile.parentFile.mkdirs()
-        layout.buildDirectory.dir("generated/omniAssets").get().asFile.deleteRecursively()
+        layout.buildDirectory.dir("generated/allwhitherAssets").get().asFile.deleteRecursively()
     }
     commandLine(
-        "python3",
+        pythonExe,
         embedScript.asFile.absolutePath,
         "--platform", "kotlin",
         "--project-dir", projectDirectory.asFile.absolutePath,
@@ -35,9 +36,9 @@ val generateEmbeddedResources = tasks.register<Exec>("generateEmbeddedResources"
 
 val generateAppName = tasks.register<Exec>("generateAppName") {
     val embedScript = repoDir.file("tools/embed_resources.py")
-    val projectDirectory = repoDir.dir("projects/$omniProject")
+    val projectDirectory = repoDir.dir("projects/$allwhitherProject")
     val generatedFile = layout.buildDirectory.file(
-        "generated/omniRes/values/strings.xml")
+        "generated/allwhitherRes/values/strings.xml")
     inputs.file(embedScript)
     inputs.dir(projectDirectory)
     outputs.file(generatedFile)
@@ -45,7 +46,7 @@ val generateAppName = tasks.register<Exec>("generateAppName") {
         generatedFile.get().asFile.parentFile.mkdirs()
     }
     commandLine(
-        "python3",
+        pythonExe,
         embedScript.asFile.absolutePath,
         "--platform", "android",
         "--project-dir", projectDirectory.asFile.absolutePath,
@@ -54,7 +55,7 @@ val generateAppName = tasks.register<Exec>("generateAppName") {
 }
 
 android {
-    namespace = "org.omni.starter"
+    namespace = "org.allwhither.starter"
     compileSdk = 35
 
     kotlinOptions {
@@ -66,18 +67,18 @@ android {
     }
 
     defaultConfig {
-        applicationId = "org.omni.starter"
+        applicationId = "org.allwhither.starter"
         minSdk = 23
         targetSdk = 35
         versionCode = 1
         versionName = "1.0"
-        buildConfigField("String", "OMNI_PROJECT", "\"$omniProject\"")
+        buildConfigField("String", "ALLWHITHER_PROJECT", "\"$allwhitherProject\"")
     }
 
     sourceSets {
         getByName("main") {
-            java.srcDir(layout.buildDirectory.dir("generated/omniEmbedded"))
-            res.srcDir(layout.buildDirectory.dir("generated/omniRes"))
+            java.srcDir(layout.buildDirectory.dir("generated/allwhitherEmbedded"))
+            res.srcDir(layout.buildDirectory.dir("generated/allwhitherRes"))
         }
     }
 
@@ -97,7 +98,7 @@ tasks.configureEach {
 }
 
 android.applicationVariants.configureEach {
-    val projectOutputName = "$omniProject-${name}.apk"
+    val projectOutputName = "$allwhitherProject-${name}.apk"
     outputs.configureEach {
         (this as com.android.build.gradle.internal.api.BaseVariantOutputImpl).outputFileName =
             projectOutputName

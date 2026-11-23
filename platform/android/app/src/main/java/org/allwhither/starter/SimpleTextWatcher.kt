@@ -1,4 +1,4 @@
-package org.omni.starter
+package org.allwhither.starter
 
 import android.text.Editable
 import android.text.TextWatcher

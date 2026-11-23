@@ -1,5 +1,5 @@
-#ifndef OMNI_HTTP_CLIENT_H
-#define OMNI_HTTP_CLIENT_H
+#ifndef ALLWHITHER_HTTP_CLIENT_H
+#define ALLWHITHER_HTTP_CLIENT_H
 
 #include <JavaScriptCore/JavaScript.h>
 

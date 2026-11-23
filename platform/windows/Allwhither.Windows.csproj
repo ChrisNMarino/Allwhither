@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PythonExe Condition="'$(PythonExe)' == '' And $([MSBuild]::IsOSPlatform('Windows'))">python</PythonExe>
+    <PythonExe Condition="'$(PythonExe)' == ''">python3</PythonExe>
+  </PropertyGroup>
+  <PropertyGroup>
+    <AllwhitherProject Condition="'$(AllwhitherProject)' == ''">example</AllwhitherProject>
+    <AssemblyName>$(AllwhitherProject)</AssemblyName>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Jint" Version="4.2.0" />
+    <AllwhitherProjectFiles Include="../../projects/$(AllwhitherProject)/**/*.json" />
+    <AllwhitherProjectFiles Include="../../projects/$(AllwhitherProject)/**/*.js" />
+  </ItemGroup>
+  <Target Name="ValidateAllwhitherProject" BeforeTargets="PrepareForBuild">
+    <Error Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(AllwhitherProject)', '^[A-Za-z0-9][A-Za-z0-9._-]*$')) != 'True'"
+           Text="AllwhitherProject must be a project directory name." />
+    <Error Condition="!Exists('$(MSBuildThisFileDirectory)../../projects/$(AllwhitherProject)/$(AllwhitherProject).json')"
+           Text="Missing projects/$(AllwhitherProject)/$(AllwhitherProject).json." />
+  </Target>
+  <Target Name="GenerateEmbeddedResources"
+          BeforeTargets="CoreCompile"
+          Inputs="$(MSBuildThisFileDirectory)../../tools/embed_resources.py;@(AllwhitherProjectFiles)"
+          Outputs="$(IntermediateOutputPath)EmbeddedResourceData.$(AllwhitherProject).g.cs">
+    <Exec Command="$(PythonExe) &quot;$(MSBuildThisFileDirectory)../../tools/embed_resources.py&quot; --platform csharp --project-dir &quot;$(MSBuildThisFileDirectory)../../projects/$(AllwhitherProject)&quot; --output &quot;$(IntermediateOutputPath)EmbeddedResourceData.$(AllwhitherProject).g.cs&quot;" />
+  </Target>
+  <Target Name="IncludeEmbeddedResources" BeforeTargets="CoreCompile" DependsOnTargets="GenerateEmbeddedResources">
+    <ItemGroup>
+      <Compile Include="$(IntermediateOutputPath)EmbeddedResourceData.$(AllwhitherProject).g.cs" />
+      <FileWrites Include="$(IntermediateOutputPath)EmbeddedResourceData.$(AllwhitherProject).g.cs" />
+    </ItemGroup>
+  </Target>
+  <Target Name="RemoveLooseAllwhitherFiles" AfterTargets="Build">
+    <ItemGroup>
+      <LooseAllwhitherFiles Include="$(TargetDir)**/*.json"
+                            Exclude="$(TargetDir)**/*.runtimeconfig.json;$(TargetDir)**/*.deps.json" />
+    </ItemGroup>
+    <Delete Files="@(LooseAllwhitherFiles)" />
+    <RemoveDir Directories="$(TargetDir)scripts" />
+  </Target>
+</Project>

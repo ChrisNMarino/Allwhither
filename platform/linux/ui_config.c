@@ -73,6 +73,63 @@ ui_read_array(JsonObject *object, const char *member, JsonArray **array)
     return TRUE;
 }
 
+gboolean
+ui_layout_validate(JsonObject *layout, gboolean allow_center)
+{
+    const char *type;
+    if (layout == NULL || !ui_read_string(layout, "type", &type) ||
+        !(g_str_equal(type, "vertical") || g_str_equal(type, "horizontal") ||
+          (allow_center && g_str_equal(type, "center")))) {
+        return FALSE;
+    }
+    if (!json_object_has_member(layout, "media")) {
+        return TRUE;
+    }
+    JsonArray *media;
+    if (g_str_equal(type, "center") || !ui_read_array(layout, "media", &media)) {
+        return FALSE;
+    }
+    for (guint index = 0; index < json_array_get_length(media); index++) {
+        JsonNode *node = json_array_get_element(media, index);
+        if (!JSON_NODE_HOLDS_OBJECT(node)) {
+            return FALSE;
+        }
+        JsonObject *rule = json_node_get_object(node);
+        const char *rule_type;
+        int limit;
+        gboolean has_min = json_object_has_member(rule, "minWidth");
+        gboolean has_max = json_object_has_member(rule, "maxWidth");
+        if (!ui_read_string(rule, "type", &rule_type) ||
+            !(g_str_equal(rule_type, "vertical") || g_str_equal(rule_type, "horizontal")) ||
+            (!has_min && !has_max) ||
+            (has_min && (!ui_read_integer(rule, "minWidth", &limit) || limit < 0)) ||
+            (has_max && (!ui_read_integer(rule, "maxWidth", &limit) || limit < 0))) {
+            return FALSE;
+        }
+    }
+    return TRUE;
+}
+
+const char *
+ui_layout_resolve(JsonObject *layout, int width)
+{
+    const char *type = json_object_get_string_member(layout, "type");
+    if (!json_object_has_member(layout, "media")) {
+        return type;
+    }
+    JsonArray *media = json_object_get_array_member(layout, "media");
+    for (guint index = 0; index < json_array_get_length(media); index++) {
+        JsonObject *rule = json_array_get_object_element(media, index);
+        if ((!json_object_has_member(rule, "minWidth") ||
+             width >= json_object_get_int_member(rule, "minWidth")) &&
+            (!json_object_has_member(rule, "maxWidth") ||
+             width <= json_object_get_int_member(rule, "maxWidth"))) {
+            type = json_object_get_string_member(rule, "type");
+        }
+    }
+    return type;
+}
+
 static gboolean
 has_string_array(JsonArray *array)
 {
@@ -276,11 +333,17 @@ validate_control(JsonObject *control)
         }
         return TRUE;
     }
-    if (g_str_equal(type, "panel")) {
+    if (g_str_equal(type, "panel") || g_str_equal(type, "group")) {
         const char *label;
         JsonArray *children;
-        if (!ui_read_string(control, "label", &label) ||
+        gboolean is_group = g_str_equal(type, "group");
+        if ((!is_group && !ui_read_string(control, "label", &label)) ||
             !ui_read_array(control, "children", &children)) {
+            return FALSE;
+        }
+        if (is_group && json_object_has_member(control, "layout") &&
+            (!JSON_NODE_HOLDS_OBJECT(json_object_get_member(control, "layout")) ||
+             !ui_layout_validate(json_object_get_object_member(control, "layout"), FALSE))) {
             return FALSE;
         }
         for (guint index = 0; index < json_array_get_length(children); index++) {
@@ -321,7 +384,8 @@ visit_control(const char *id,
     g_hash_table_add(visiting, (gpointer) id);
     const char *type;
     ui_read_string(control, "type", &type);
-    if (g_str_equal(type, "scrollPanel") || g_str_equal(type, "panel")) {
+    if (g_str_equal(type, "scrollPanel") || g_str_equal(type, "panel") ||
+        g_str_equal(type, "group")) {
         JsonArray *children;
         ui_read_array(control, "children", &children);
         for (guint index = 0; index < json_array_get_length(children); index++) {
@@ -495,7 +559,7 @@ collect_declared_scripts(JsonArray *scripts,
                         "scripts must contain non-empty paths");
             return FALSE;
         }
-        char *resolved = omni_resource_resolve(
+        char *resolved = allwhither_resource_resolve(
             base_path, json_node_get_string(item), error);
         if (resolved == NULL) {
             return FALSE;
@@ -518,7 +582,7 @@ collect_declared_scripts(JsonArray *scripts,
 static JsonObject *
 load_configuration_file(const char *path, GHashTable *include_stack, GError **error)
 {
-    char *full_path = omni_resource_normalize(path, error);
+    char *full_path = allwhither_resource_normalize(path, error);
     if (full_path == NULL) {
         return NULL;
     }
@@ -535,7 +599,7 @@ load_configuration_file(const char *path, GHashTable *include_stack, GError **er
     JsonParser *parser = NULL;
     JsonObject *merged = NULL;
     JsonArray *scripts = NULL;
-    text = omni_resource_read(full_path, &length, error);
+    text = allwhither_resource_read(full_path, &length, error);
     if (text == NULL) {
         goto fail;
     }
@@ -573,7 +637,7 @@ load_configuration_file(const char *path, GHashTable *include_stack, GError **er
                             "includes must contain non-empty paths");
                 goto fail;
             }
-            char *include_path = omni_resource_resolve(
+            char *include_path = allwhither_resource_resolve(
                 full_path, json_node_get_string(include_node), error);
             if (include_path == NULL) {
                 goto fail;
@@ -656,8 +720,7 @@ ui_config_validate(JsonObject *root,
     const char *layout_type;
     gboolean fullscreen;
     if (!ui_read_string(layout, "type", &layout_type) ||
-        (!g_str_equal(layout_type, "vertical") &&
-         !g_str_equal(layout_type, "center")) ||
+        !ui_layout_validate(layout, TRUE) ||
         !ui_read_string(window, "title", title) ||
         !ui_read_integer(window, "width", width) || *width <= 0 ||
         !ui_read_integer(window, "height", height) || *height <= 0 ||

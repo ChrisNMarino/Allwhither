@@ -6,7 +6,7 @@ using Jint.Native.Array;
 using Jint.Native.Object;
 using Jint.Runtime;
 
-namespace Omni.Windows;
+namespace Allwhither.Windows;
 
 public sealed class FileApi
 {
@@ -219,7 +219,7 @@ public sealed class FileStorageApi
     {
         this.engine = engine;
         string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        storageRoot = Path.GetFullPath(Path.Combine(appData, "omni", EmbeddedResourceData.ProjectName, "storage"));
+        storageRoot = Path.GetFullPath(Path.Combine(appData, "allwhither", EmbeddedResourceData.ProjectName, "storage"));
     }
 
     private string ResolvePath(string relativePath)

@@ -47,6 +47,16 @@ body {
   justify-content: center;
 }
 
+.control-list.horizontal {
+  flex-direction: row;
+  align-items: flex-start;
+}
+
+.control-list.horizontal > * {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
 h1,
 h2 {
   margin: 0;
@@ -192,18 +202,18 @@ output {
   color: #555;
 }
 
-.omni-colored input::placeholder,
-.omni-colored textarea::placeholder {
-  color: var(--omni-placeholder);
+.allwhither-colored input::placeholder,
+.allwhither-colored textarea::placeholder {
+  color: var(--allwhither-placeholder);
   opacity: 1;
 }
 
 #window.themed-chrome .menu-items,
 #window.themed-chrome .menu-items button {
-  background: var(--omni-chrome-bg, #fff);
-  color: var(--omni-chrome-fg, inherit);
+  background: var(--allwhither-chrome-bg, #fff);
+  color: var(--allwhither-chrome-fg, inherit);
 }
 
 #window.themed-chrome .menu-items button:hover {
-  background: color-mix(in srgb, var(--omni-chrome-fg, #000) 14%, transparent);
+  background: color-mix(in srgb, var(--allwhither-chrome-fg, #000) 14%, transparent);
 }

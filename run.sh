@@ -8,7 +8,7 @@ available_projects() {
   for dir in "$root_dir"/projects/*/; do
     [[ -d "$dir" ]] || continue
     name="$(basename "$dir")"
-    if [[ -f "${dir}${name}.omni" ]]; then
+    if [[ -f "${dir}${name}.json" ]]; then
       printf '%s\n' "$name"
     fi
   done
@@ -18,7 +18,7 @@ usage() {
   cat <<EOF
 Usage: ./run.sh [linux|windows|android|web] [project]
 
-A project is a directory under projects/ with an entry file named <project>.omni.
+A project is a directory under projects/ with an entry file named <project>.json.
 Available projects: $(available_projects | paste -sd ' ' -)
 
 If either argument is omitted, the script prompts for it.
@@ -28,8 +28,8 @@ The web option serves that directory at http://127.0.0.1:8080/.
 Set PORT to use another port.
 The android option installs the debug APK and starts it.
 On Linux, the windows option launches a cross-compiled DLL with Wine and the
-.NET 8 Windows Desktop runtime. Set OMNI_WINEPREFIX to that prefix
-(default: ~/.cache/omni-wine).
+.NET 8 Windows Desktop runtime. Set ALLWHITHER_WINEPREFIX to that prefix
+(default: ~/.cache/allwhither-wine).
 EOF
 }
 
@@ -60,8 +60,8 @@ if [[ -z "$platform" ]]; then
 fi
 
 if [[ -z "$project" ]]; then
-  read -r -p "Omni project ($(available_projects | paste -sd '/' -)): " project || {
-    echo "An Omni project is required." >&2
+  read -r -p "Allwhither project ($(available_projects | paste -sd '/' -)): " project || {
+    echo "An Allwhither project is required." >&2
     exit 2
   }
 fi
@@ -75,8 +75,8 @@ case "$platform" in
 esac
 
 if [[ ! "$project" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] ||
-   [[ ! -f "$root_dir/projects/$project/$project.omni" ]]; then
-  echo "Unknown Omni project '$project'." >&2
+   [[ ! -f "$root_dir/projects/$project/$project.json" ]]; then
+  echo "Unknown Allwhither project '$project'." >&2
   echo "Available projects: $(available_projects | paste -sd ' ' -)" >&2
   exit 2
 fi
@@ -109,10 +109,10 @@ is_elf() {
 
 launch_windows() {
   local config dir wine_prefix wine_dotnet
-  wine_prefix="${OMNI_WINEPREFIX:-$HOME/.cache/omni-wine}"
+  wine_prefix="${ALLWHITHER_WINEPREFIX:-$HOME/.cache/allwhither-wine}"
   wine_dotnet="${wine_prefix}/drive_c/Program Files/dotnet/dotnet.exe"
   for config in debug release; do
-    dir="build/${project}/windows/bin/Omni.Windows/${config}"
+    dir="build/${project}/windows/bin/Allwhither.Windows/${config}"
     if [[ -f "${dir}/${project}.exe" ]]; then
       exec "${dir}/${project}.exe"
     fi
@@ -160,8 +160,8 @@ launch_android() {
     exit 1
   fi
   "$adb" install -r "$apk"
-  "$adb" shell am force-stop org.omni.starter
-  "$adb" shell am start -n org.omni.starter/.MainActivity
+  "$adb" shell am force-stop org.allwhither.starter
+  "$adb" shell am start -n org.allwhither.starter/.MainActivity
 }
 
 case "$platform" in

@@ -1,6 +1,6 @@
 import { loadConfiguration, validateUi } from "./ui-config.js";
 import { chromeColors } from "./colors.js";
-import { renderControl, renderMenus } from "./control-renderer.js";
+import { renderControl, renderMenus, trackResponsiveLayout, updateResponsiveLayouts } from "./control-renderer.js";
 import { ActionRuntime } from "./action-runtime.js";
 import { ResourceStore } from "./resource-codec.js";
 import { UiDom } from "./ui-dom.js";
@@ -13,7 +13,7 @@ async function startApplication() {
   const payload = await response.json();
   if (typeof payload.entry !== "string" || payload.entry === "" ||
       payload.files === null || typeof payload.files !== "object") {
-    throw new Error("The web payload is missing its Omni files.");
+    throw new Error("The web payload is missing its Allwhither files.");
   }
   const resources = new ResourceStore(payload.files);
   const application = loadConfiguration(resources, payload.entry);
@@ -40,12 +40,12 @@ async function startApplication() {
   if (chrome.background) {
     windowElement.style.backgroundColor = chrome.background;
     document.body.style.backgroundColor = chrome.background;
-    windowElement.style.setProperty("--omni-chrome-bg", chrome.background);
+    windowElement.style.setProperty("--allwhither-chrome-bg", chrome.background);
   }
   if (chrome.foreground) {
     windowElement.style.color = chrome.foreground;
     status.style.color = chrome.foreground;
-    windowElement.style.setProperty("--omni-chrome-fg", chrome.foreground);
+    windowElement.style.setProperty("--allwhither-chrome-fg", chrome.foreground);
   }
   if (chrome.background || chrome.foreground) {
     windowElement.classList.add("themed-chrome");
@@ -58,12 +58,13 @@ async function startApplication() {
   document.getElementById("menus").hidden = fullscreenCenter;
   status.hidden = fullscreenCenter;
   renderMenus(ui.menus, status, document.getElementById("menus"));
-  controls.classList.toggle("centered", ui.window.layout.type === "center");
+  trackResponsiveLayout(controls, ui.window.layout);
   ui.window.layout.children.forEach((controlId) => {
     controls.append(renderControl(
       controlId, ui.controls, status, actionRuntime, dom, theme,
     ));
   });
+  window.addEventListener("resize", updateResponsiveLayouts);
 }
 
 startApplication().catch((error) => {

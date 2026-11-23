@@ -1,0 +1,7 @@
+{
+  "application": {
+    "id": "org.allwhither.example",
+    "name": "Allwhither example"
+  },
+  "includes": ["ui.json"]
+}

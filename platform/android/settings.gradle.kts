@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Omni"
+rootProject.name = "Allwhither"
 include(":app")

@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Windows.Forms;
 
-namespace Omni.Windows;
+namespace Allwhither.Windows;
 
 internal sealed class ControlRenderer
 {
@@ -10,7 +10,9 @@ internal sealed class ControlRenderer
     private readonly ToolStripStatusLabel status;
     private readonly UiDom dom;
     private readonly JavaScriptActionRuntime actionRuntime;
-    private readonly int width;
+    private int width;
+    private readonly Dictionary<Control, int> widthOffsets = new();
+    private readonly Dictionary<Control, JsonElement> groups = new();
     private readonly Color? themeBackground;
     private readonly Color? themeForeground;
 
@@ -154,6 +156,7 @@ internal sealed class ControlRenderer
                     Width = width - 8
                 };
                 combo.Items.AddRange(options);
+                Track(combo, -8);
                 combo.SelectedIndex = UiDefinition.GetSelectedIndex(spec, options.Length);
                 combo.SelectedIndexChanged += (_, _) =>
                 {
@@ -175,6 +178,7 @@ internal sealed class ControlRenderer
                     UseSystemPasswordChar = isPassword,
                     Width = width - 8
                 };
+                Track(textBox, -8);
                 textBox.TextChanged += (_, _) =>
                 {
                     status.Text = textBox.UseSystemPasswordChar
@@ -195,6 +199,7 @@ internal sealed class ControlRenderer
                     Text = UiDefinition.GetString(spec, "value", allowEmpty: true),
                     Width = width - 8
                 };
+                Track(textBox, -8);
                 textBox.TextChanged += (_, _) => status.Text = $"{label}: {textBox.Text}";
                 return LabeledControl(label, textBox);
             }
@@ -224,6 +229,7 @@ internal sealed class ControlRenderer
                     Height = Math.Max(64, 34 + options.Length * 28),
                     Margin = new Padding(3, 6, 3, 6)
                 };
+                Track(group, 0);
                 var optionList = new FlowLayoutPanel
                 {
                     Dock = DockStyle.Fill,
@@ -271,6 +277,7 @@ internal sealed class ControlRenderer
                     TickStyle = TickStyle.None,
                     Width = width - 8
                 };
+                Track(trackBar, -8);
                 trackBar.ValueChanged += (_, _) =>
                 {
                     valueLabel.Text = $"{label}: {trackBar.Value}";
@@ -291,6 +298,7 @@ internal sealed class ControlRenderer
                     Width = width - 8
                 };
                 list.Items.AddRange(options);
+                Track(list, -8);
                 list.SelectedIndex = UiDefinition.GetSelectedIndex(spec, options.Length);
                 list.SelectedIndexChanged += (_, _) =>
                 {
@@ -323,7 +331,28 @@ internal sealed class ControlRenderer
                 {
                     panel.Controls.Add(Render(child.GetString()!));
                 }
+                Track(panel, 0);
                 return panel;
+            }
+            case "group":
+            {
+                var group = new FlowLayoutPanel
+                {
+                    AutoSize = true,
+                    AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                    FlowDirection = FlowDirection.TopDown,
+                    WrapContents = false,
+                    Margin = new Padding(3)
+                };
+                foreach (JsonElement child in UiDefinition.GetArray(spec, "children").EnumerateArray())
+                {
+                    group.Controls.Add(Render(child.GetString()!));
+                }
+                if (spec.TryGetProperty("layout", out JsonElement groupLayout))
+                {
+                    RegisterGroup(group, groupLayout);
+                }
+                return group;
             }
             case "scrollPanel":
             {
@@ -355,6 +384,8 @@ internal sealed class ControlRenderer
                     children.Controls.Add(Render(child.GetString()!));
                 }
                 scrollPanel.Controls.Add(children);
+                Track(group, 0);
+                Track(children, -40);
                 group.Controls.Add(scrollPanel);
                 return group;
             }
@@ -376,14 +407,53 @@ internal sealed class ControlRenderer
         return panel;
     }
 
-    private FlowLayoutPanel NewControlPanel() => new()
+    private FlowLayoutPanel NewControlPanel()
     {
-        AutoSize = true,
-        Width = width,
-        FlowDirection = FlowDirection.TopDown,
-        WrapContents = false,
-        Margin = new Padding(3, 6, 3, 6)
-    };
+        var panel = new FlowLayoutPanel
+        {
+            AutoSize = true,
+            Width = width,
+            FlowDirection = FlowDirection.TopDown,
+            WrapContents = false,
+            Margin = new Padding(3, 6, 3, 6)
+        };
+        Track(panel, 0);
+        return panel;
+    }
+
+    private void Track(Control control, int offset) => widthOffsets[control] = offset;
+
+    internal void RegisterGroup(Control group, JsonElement layout) => groups[group] = layout;
+
+    // Sizes controls to the available column width and picks each group's
+    // direction from its media rules for the current window width.
+    internal void ApplyWidth(Control root, int columnWidth, int windowWidth)
+    {
+        width = columnWidth;
+        ApplyColumnWidth(root, columnWidth, windowWidth);
+    }
+
+    private void ApplyColumnWidth(Control control, int columnWidth, int windowWidth)
+    {
+        if (widthOffsets.TryGetValue(control, out int offset))
+        {
+            control.Width = columnWidth + offset;
+        }
+        int childWidth = columnWidth;
+        if (control is FlowLayoutPanel flow && groups.TryGetValue(control, out JsonElement layout))
+        {
+            bool horizontal = UiDefinition.ResolveLayoutType(layout, windowWidth) == "horizontal";
+            flow.FlowDirection = horizontal ? FlowDirection.LeftToRight : FlowDirection.TopDown;
+            if (horizontal && flow.Controls.Count > 0)
+            {
+                childWidth = Math.Max(80, columnWidth / flow.Controls.Count - 6);
+            }
+        }
+        foreach (Control child in control.Controls)
+        {
+            ApplyColumnWidth(child, childWidth, windowWidth);
+        }
+    }
 
     private void ApplyColors(JsonElement spec, Control control)
     {

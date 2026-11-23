@@ -1,4 +1,4 @@
-package org.omni.starter
+package org.allwhither.starter
 
 import android.app.Activity
 import android.content.Intent
@@ -23,7 +23,7 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
 
         try {
-            val configuration = UiConfiguration(BuildConfig.OMNI_PROJECT)
+            val configuration = UiConfiguration(BuildConfig.ALLWHITHER_PROJECT)
             val application = configuration.load()
             val ui = application.getJSONObject("ui")
             val window = ui.getJSONObject("window")
@@ -81,7 +81,7 @@ class MainActivity : Activity() {
             }
 
             val controlList = LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
+                orientation = configuration.orientationFor(layout, resources.configuration.screenWidthDp)
                 gravity = if (layoutType == "center") Gravity.CENTER else Gravity.TOP
             }
             val dom = UiDom(controls, status)

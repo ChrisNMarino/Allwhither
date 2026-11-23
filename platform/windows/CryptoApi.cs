@@ -5,7 +5,7 @@ using Jint;
 using Jint.Native;
 using Jint.Runtime;
 
-namespace Omni.Windows;
+namespace Allwhither.Windows;
 
 public sealed class CryptoApi
 {

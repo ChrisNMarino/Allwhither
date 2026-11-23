@@ -8,7 +8,7 @@ available_projects() {
   for dir in "$root_dir"/projects/*/; do
     [[ -d "$dir" ]] || continue
     name="$(basename "$dir")"
-    if [[ -f "${dir}${name}.omni" ]]; then
+    if [[ -f "${dir}${name}.json" ]]; then
       printf '%s\n' "$name"
     fi
   done
@@ -18,7 +18,7 @@ usage() {
   cat <<EOF
 Usage: ./build.sh [linux|windows|android|web] [project]
 
-A project is a directory under projects/ with an entry file named <project>.omni.
+A project is a directory under projects/ with an entry file named <project>.json.
 Available projects: $(available_projects | paste -sd ' ' -)
 
 If either argument is omitted, the script prompts for it.
@@ -48,8 +48,8 @@ if [[ -z "$platform" ]]; then
 fi
 
 if [[ -z "$project" ]]; then
-  read -r -p "Omni project ($(available_projects | paste -sd '/' -)): " project || {
-    echo "An Omni project is required." >&2
+  read -r -p "Allwhither project ($(available_projects | paste -sd '/' -)): " project || {
+    echo "An Allwhither project is required." >&2
     exit 2
   }
 fi
@@ -63,8 +63,8 @@ case "$platform" in
 esac
 
 if [[ ! "$project" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] ||
-   [[ ! -f "$root_dir/projects/$project/$project.omni" ]]; then
-  echo "Unknown Omni project '$project'." >&2
+   [[ ! -f "$root_dir/projects/$project/$project.json" ]]; then
+  echo "Unknown Allwhither project '$project'." >&2
   echo "Available projects: $(available_projects | paste -sd ' ' -)" >&2
   exit 2
 fi
@@ -172,21 +172,21 @@ cd "$root_dir"
 
 case "$platform" in
   linux)
-    cmake -S platform/linux -B "build/${project}/linux" "-DOMNI_PROJECT=$project"
+    cmake -S platform/linux -B "build/${project}/linux" "-DALLWHITHER_PROJECT=$project"
     cmake --build "build/${project}/linux"
     echo "Built build/${project}/linux/${project}"
     ;;
   windows)
-    dotnet build platform/windows/Omni.Windows.csproj \
+    dotnet build platform/windows/Allwhither.Windows.csproj \
       --artifacts-path "build/${project}/windows" \
-      "-p:EnableWindowsTargeting=true" "-p:OmniProject=$project"
+      "-p:EnableWindowsTargeting=true" "-p:AllwhitherProject=$project"
     echo "Built build/${project}/windows"
     ;;
   android)
     prepare_android_toolchain
     (
       cd platform/android
-      ./gradlew assembleDebug "-PomniProject=$project"
+      ./gradlew assembleDebug "-PallwhitherProject=$project"
     )
     echo "Built build/${project}/android"
     ;;

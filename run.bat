@@ -32,7 +32,7 @@ popd
 exit /b %RESULT%
 
 :run_windows
-set "WIN_BASE=build\%PROJECT%\windows\bin\Omni.Windows"
+set "WIN_BASE=build\%PROJECT%\windows\bin\Allwhither.Windows"
 if exist "%WIN_BASE%\debug\%PROJECT%.exe" (
     "%WIN_BASE%\debug\%PROJECT%.exe"
     goto finished
@@ -69,8 +69,8 @@ if errorlevel 1 (
 )
 "%ADB%" install -r "%APK%"
 if errorlevel 1 goto failed
-"%ADB%" shell am force-stop org.omni.starter
-"%ADB%" shell am start -n org.omni.starter/.MainActivity
+"%ADB%" shell am force-stop org.allwhither.starter
+"%ADB%" shell am start -n org.allwhither.starter/.MainActivity
 goto finished
 
 :run_web
@@ -130,7 +130,7 @@ echo Unknown platform "%PLATFORM%". Choose linux, windows, android, or web. 1>&2
 goto invalid_usage
 
 :invalid_project
-echo Unknown Omni project "%PROJECT%". 1>&2
+echo Unknown Allwhither project "%PROJECT%". 1>&2
 echo Available projects: 1>&2
 call :list_projects 1>&2
 goto invalid_usage
@@ -145,7 +145,7 @@ exit /b 0
 
 :show_usage
 echo Usage: run.bat [linux^|windows^|android^|web] [project]
-echo A project is a directory under projects\ with an entry file named ^<project^>.omni.
+echo A project is a directory under projects\ with an entry file named ^<project^>.json.
 echo Available projects:
 call :list_projects
 echo If either argument is omitted, the script prompts for it.
@@ -157,19 +157,19 @@ exit /b 0
 
 :list_projects
 for /d %%D in ("%ROOT_DIR%projects\*") do (
-    if exist "%%D\%%~nxD.omni" echo   %%~nxD
+    if exist "%%D\%%~nxD.json" echo   %%~nxD
 )
 exit /b 0
 
 :prompt_project
 echo Available projects:
 call :list_projects
-set /p "PROJECT=Omni project: "
+set /p "PROJECT=Allwhither project: "
 exit /b 0
 
 :validate_project
 if not defined PROJECT exit /b 1
 for /f "delims=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-" %%A in ("%PROJECT%") do exit /b 1
 echo.%PROJECT:~0,1%| findstr /r "[A-Za-z0-9]" >nul || exit /b 1
-if not exist "%ROOT_DIR%projects\%PROJECT%\%PROJECT%.omni" exit /b 1
+if not exist "%ROOT_DIR%projects\%PROJECT%\%PROJECT%.json" exit /b 1
 exit /b 0

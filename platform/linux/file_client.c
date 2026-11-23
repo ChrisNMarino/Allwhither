@@ -673,17 +673,17 @@ file_client_new(JSGlobalContextRef context, const char *project_name)
     FileClient *client = g_new0(FileClient, 1);
     client->context = context;
     client->project_name = g_strdup(project_name ? project_name : "example");
-    client->storage_root = g_build_filename(g_get_user_data_dir(), "omni", client->project_name, "storage", NULL);
+    client->storage_root = g_build_filename(g_get_user_data_dir(), "allwhither", client->project_name, "storage", NULL);
 
     JSClassDefinition file_def = kJSClassDefinitionEmpty;
-    file_def.className = "OmniFile";
+    file_def.className = "AllwhitherFile";
     file_def.staticFunctions = file_functions;
     JSClassRef file_class = JSClassCreate(&file_def);
     client->object = JSObjectMake(context, file_class, client);
     JSClassRelease(file_class);
 
     JSClassDefinition storage_def = kJSClassDefinitionEmpty;
-    storage_def.className = "OmniFileStorage";
+    storage_def.className = "AllwhitherFileStorage";
     storage_def.staticFunctions = storage_functions;
     JSClassRef storage_class = JSClassCreate(&storage_def);
     client->storage_object = JSObjectMake(context, storage_class, client);

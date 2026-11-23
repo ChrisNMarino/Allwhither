@@ -1,4 +1,4 @@
-package org.omni.starter
+package org.allwhither.starter
 
 import android.os.Handler
 import android.os.Looper
@@ -387,7 +387,7 @@ class FileApi(private val activity: MainActivity) {
                 }
                 onFulfilled?.call(context, scope, scope, arrayOf(jsArg))
             } catch (exception: Exception) {
-                Log.w("omni", "JavaScript File callback failed", exception)
+                Log.w("allwhither", "JavaScript File callback failed", exception)
             } finally {
                 Context.exit()
             }
@@ -396,7 +396,7 @@ class FileApi(private val activity: MainActivity) {
 
     companion object {
         private val executor: ExecutorService = Executors.newCachedThreadPool { runnable ->
-            Thread(runnable, "omni-file").apply { isDaemon = true }
+            Thread(runnable, "allwhither-file").apply { isDaemon = true }
         }
     }
 }

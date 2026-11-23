@@ -1,4 +1,4 @@
-package org.omni.starter
+package org.allwhither.starter
 
 import android.os.Handler
 import android.os.Looper
@@ -175,7 +175,7 @@ class CryptoApi {
                 val result = success ?: return
                 onFulfilled?.call(context, scope, scope, arrayOf(result))
             } catch (exception: Exception) {
-                Log.w("omni", "JavaScript Crypto callback failed", exception)
+                Log.w("allwhither", "JavaScript Crypto callback failed", exception)
             } finally {
                 Context.exit()
             }
@@ -184,7 +184,7 @@ class CryptoApi {
 
     companion object {
         private val executor: ExecutorService = Executors.newCachedThreadPool { runnable ->
-            Thread(runnable, "omni-crypto").apply { isDaemon = true }
+            Thread(runnable, "allwhither-crypto").apply { isDaemon = true }
         }
     }
 }

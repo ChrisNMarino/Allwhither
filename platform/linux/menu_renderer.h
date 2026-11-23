@@ -1,5 +1,5 @@
-#ifndef OMNI_MENU_RENDERER_H
-#define OMNI_MENU_RENDERER_H
+#ifndef ALLWHITHER_MENU_RENDERER_H
+#define ALLWHITHER_MENU_RENDERER_H
 
 #include <gtk/gtk.h>
 #include <json-glib/json-glib.h>

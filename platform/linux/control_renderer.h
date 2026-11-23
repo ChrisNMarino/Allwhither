@@ -1,5 +1,5 @@
-#ifndef OMNI_CONTROL_RENDERER_H
-#define OMNI_CONTROL_RENDERER_H
+#ifndef ALLWHITHER_CONTROL_RENDERER_H
+#define ALLWHITHER_CONTROL_RENDERER_H
 
 #include <gtk/gtk.h>
 #include <json-glib/json-glib.h>
@@ -14,6 +14,8 @@ void control_renderer_style_tree(GtkWidget *widget,
                                  const char *background,
                                  const char *foreground);
 const char *control_renderer_contrast_foreground(const char *background);
+void control_renderer_track_layout(GtkWidget *box, JsonObject *layout);
+void control_renderer_update_layouts(int width);
 gboolean control_renderer_render(const char *control_id,
                                  JsonObject *spec,
                                  JsonObject *controls,

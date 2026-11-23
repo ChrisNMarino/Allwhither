@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace Omni.Windows;
+namespace Allwhither.Windows;
 
 internal static class EmbeddedResources
 {

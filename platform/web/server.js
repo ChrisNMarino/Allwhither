@@ -97,6 +97,6 @@ const server = http.createServer(async (request, response) => {
 });
 
 server.listen(port, host, () => {
-  console.log(`omni web starter: http://${host}:${port}/`);
+  console.log(`allwhither web starter: http://${host}:${port}/`);
   console.log(`Serving ${contentRoot}`);
 });

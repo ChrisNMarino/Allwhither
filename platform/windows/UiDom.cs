@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Windows.Forms;
 
-namespace Omni.Windows;
+namespace Allwhither.Windows;
 
 public sealed class UiDom
 {

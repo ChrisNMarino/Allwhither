@@ -4,7 +4,7 @@
 #include <string.h>
 
 char *
-omni_resource_normalize(const char *relative_path, GError **error)
+allwhither_resource_normalize(const char *relative_path, GError **error)
 {
     if (relative_path == NULL || *relative_path == '\0') {
         g_set_error(error, G_IO_ERROR, G_IO_ERROR_INVALID_FILENAME,
@@ -60,11 +60,11 @@ omni_resource_normalize(const char *relative_path, GError **error)
 }
 
 char *
-omni_resource_resolve(const char *current_resource,
+allwhither_resource_resolve(const char *current_resource,
                       const char *relative_path,
                       GError **error)
 {
-    char *normalized_current = omni_resource_normalize(current_resource, error);
+    char *normalized_current = allwhither_resource_normalize(current_resource, error);
     if (normalized_current == NULL) {
         return NULL;
     }
@@ -74,19 +74,19 @@ omni_resource_resolve(const char *current_resource,
         : g_strdup_printf("%.*s/%s", (int)(slash - normalized_current),
                           normalized_current, relative_path);
     g_free(normalized_current);
-    char *resolved = omni_resource_normalize(combined, error);
+    char *resolved = allwhither_resource_normalize(combined, error);
     g_free(combined);
     return resolved;
 }
 
 char *
-omni_resource_read(const char *relative_path, gsize *length, GError **error)
+allwhither_resource_read(const char *relative_path, gsize *length, GError **error)
 {
-    char *normalized = omni_resource_normalize(relative_path, error);
+    char *normalized = allwhither_resource_normalize(relative_path, error);
     if (normalized == NULL) {
         return NULL;
     }
-    for (const OmniEmbeddedResource *resource = omni_embedded_resources;
+    for (const AllwhitherEmbeddedResource *resource = allwhither_embedded_resources;
          resource->path != NULL;
          resource++) {
         if (!g_str_equal(resource->path, normalized)) {
@@ -94,7 +94,7 @@ omni_resource_read(const char *relative_path, gsize *length, GError **error)
         }
         char *text = g_malloc(resource->length + 1);
         for (gsize index = 0; index < resource->length; index++) {
-            unsigned char mask = omni_embedded_key[index % 16] ^
+            unsigned char mask = allwhither_embedded_key[index % 16] ^
                 (unsigned char)((index * 13u + 7u) & 0xFFu);
             text[index] = (char)(resource->data[index] ^ mask);
         }

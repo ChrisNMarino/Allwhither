@@ -1,9 +1,9 @@
 {
   "application": {
-    "id": "org.omni.keyviper",
+    "id": "org.allwhither.keyviper",
     "name": "Key Viper"
   },
-  "includes": ["file-panel.omni", "entries-panel.omni"],
+  "includes": ["file-panel.json", "entries-panel.json"],
   "scripts": ["keyviper.js"],
   "ui": {
     "window": {

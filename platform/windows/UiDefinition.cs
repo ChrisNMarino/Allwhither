@@ -1,6 +1,6 @@
 using System.Text.Json;
 
-namespace Omni.Windows;
+namespace Allwhither.Windows;
 
 internal static class UiDefinition
 {
@@ -66,7 +66,7 @@ internal static class UiDefinition
 
         visiting.Add(id);
         ValidateControl(spec);
-        if (GetString(spec, "type") is "scrollPanel" or "panel")
+        if (GetString(spec, "type") is "scrollPanel" or "panel" or "group")
         {
             foreach (JsonElement child in GetArray(spec, "children").EnumerateArray())
             {
@@ -150,9 +150,77 @@ internal static class UiDefinition
                     GetControlId(child);
                 }
                 break;
+            case "group":
+                if (spec.TryGetProperty("layout", out JsonElement groupLayout))
+                {
+                    ValidateLayout(groupLayout, false, "group.layout");
+                }
+                foreach (JsonElement child in GetArray(spec, "children").EnumerateArray())
+                {
+                    GetControlId(child);
+                }
+                break;
             default:
                 throw new InvalidDataException("Unsupported control type.");
         }
+    }
+
+    internal static void ValidateLayout(JsonElement layout, bool allowCenter, string name)
+    {
+        if (layout.ValueKind != JsonValueKind.Object)
+        {
+            throw new InvalidDataException($"{name} must be an object.");
+        }
+        string type = GetString(layout, "type");
+        if (type is not ("vertical" or "horizontal") && !(allowCenter && type == "center"))
+        {
+            throw new InvalidDataException($"{name}.type is not supported.");
+        }
+        if (!layout.TryGetProperty("media", out JsonElement media))
+        {
+            return;
+        }
+        if (type == "center" || media.ValueKind != JsonValueKind.Array)
+        {
+            throw new InvalidDataException(
+                $"{name}.media must be an array and is not supported for center layouts.");
+        }
+        foreach (JsonElement rule in media.EnumerateArray())
+        {
+            if (rule.ValueKind != JsonValueKind.Object ||
+                GetString(rule, "type") is not ("vertical" or "horizontal"))
+            {
+                throw new InvalidDataException($"{name}.media type must be 'vertical' or 'horizontal'.");
+            }
+            bool hasMin = rule.TryGetProperty("minWidth", out _);
+            bool hasMax = rule.TryGetProperty("maxWidth", out _);
+            if (!hasMin && !hasMax)
+            {
+                throw new InvalidDataException($"{name}.media rules need minWidth or maxWidth.");
+            }
+            if ((hasMin && GetInt(rule, "minWidth") < 0) || (hasMax && GetInt(rule, "maxWidth") < 0))
+            {
+                throw new InvalidDataException($"{name}.media widths must not be negative.");
+            }
+        }
+    }
+
+    internal static string ResolveLayoutType(JsonElement layout, int width)
+    {
+        string type = GetString(layout, "type");
+        if (!layout.TryGetProperty("media", out JsonElement media))
+        {
+            return type;
+        }
+        foreach (JsonElement rule in media.EnumerateArray())
+        {
+            if ((!rule.TryGetProperty("minWidth", out JsonElement min) || width >= min.GetInt32()) &&
+                (!rule.TryGetProperty("maxWidth", out JsonElement max) || width <= max.GetInt32()))
+            {
+                type = GetString(rule, "type");
+            }
+        }
+        return type;
     }
 
     private static void ValidateActions(JsonElement spec)

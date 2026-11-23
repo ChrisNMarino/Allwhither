@@ -21,7 +21,7 @@ function normalizeRelativePath(path) {
 
 class WebFileStorage {
   constructor() {
-    this.prefix = "omni_fs:";
+    this.prefix = "allwhither_fs:";
   }
 
   async read(path) {

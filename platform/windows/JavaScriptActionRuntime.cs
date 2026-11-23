@@ -2,7 +2,7 @@ using System.Text.Json;
 using Jint;
 using Jint.Runtime;
 
-namespace Omni.Windows;
+namespace Allwhither.Windows;
 
 public sealed class JavaScriptActionEvent(
     string type,

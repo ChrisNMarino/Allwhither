@@ -1,5 +1,5 @@
-#ifndef OMNI_ACTION_RUNTIME_H
-#define OMNI_ACTION_RUNTIME_H
+#ifndef ALLWHITHER_ACTION_RUNTIME_H
+#define ALLWHITHER_ACTION_RUNTIME_H
 
 #include <gtk/gtk.h>
 #include <json-glib/json-glib.h>

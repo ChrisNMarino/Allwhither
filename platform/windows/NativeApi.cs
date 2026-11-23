@@ -1,7 +1,7 @@
 using Jint;
 using Jint.Native;
 
-namespace Omni.Windows;
+namespace Allwhither.Windows;
 
 public sealed class NativeApi
 {

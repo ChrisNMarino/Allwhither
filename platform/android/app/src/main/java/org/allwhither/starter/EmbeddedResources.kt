@@ -1,4 +1,4 @@
-package org.omni.starter
+package org.allwhither.starter
 
 import java.io.FileNotFoundException
 import java.nio.charset.StandardCharsets

@@ -1,4 +1,4 @@
-package org.omni.starter
+package org.allwhither.starter
 
 import android.view.View
 import android.view.ViewGroup
@@ -293,7 +293,7 @@ class UiDom(
         val control = controls.optJSONObject(id)
         if (control != null) {
             val type = control.optString("type")
-            if (type == "panel" || type == "scrollPanel") {
+            if (type == "panel" || type == "scrollPanel" || type == "group") {
                 val children = control.optJSONArray("children")
                 if (children != null) {
                     for (index in 0 until children.length()) {

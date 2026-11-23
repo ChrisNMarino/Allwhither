@@ -3,15 +3,29 @@
 #include "menu_renderer.h"
 #include "ui_config.h"
 
-#ifndef OMNI_PROJECT_NAME
-#define OMNI_PROJECT_NAME "example"
+#ifndef ALLWHITHER_PROJECT_NAME
+#define ALLWHITHER_PROJECT_NAME "example"
 #endif
+
+static gboolean
+on_window_tick(GtkWidget *window, GdkFrameClock *clock, gpointer user_data)
+{
+    static int last_width = 0;
+    (void)clock;
+    (void)user_data;
+    int width = gtk_widget_get_width(window);
+    if (width > 0 && width != last_width) {
+        last_width = width;
+        control_renderer_update_layouts(width);
+    }
+    return G_SOURCE_CONTINUE;
+}
 
 static void
 on_activate(GtkApplication *application, gpointer user_data)
 {
     (void)user_data;
-    const char *config_path = OMNI_PROJECT_NAME ".omni";
+    const char *config_path = ALLWHITHER_PROJECT_NAME ".json";
     GError *error = NULL;
     JsonObject *root = ui_config_load(config_path, &error);
     if (root == NULL) {
@@ -88,7 +102,7 @@ on_activate(GtkApplication *application, gpointer user_data)
         g_application_quit(G_APPLICATION(application));
         return;
     }
-    g_object_set_data_full(G_OBJECT(window), "omni-action-runtime",
+    g_object_set_data_full(G_OBJECT(window), "allwhither-action-runtime",
                            runtime, action_runtime_free);
     action_runtime_set_window(runtime, GTK_WINDOW(window));
     GtkWidget *heading = NULL;
@@ -119,6 +133,10 @@ on_activate(GtkApplication *application, gpointer user_data)
         gtk_widget_set_vexpand(control_box, TRUE);
     }
     action_runtime_set_container(runtime, control_box, centered_layout);
+    control_renderer_update_layouts(width);
+    if (!centered_layout) {
+        control_renderer_track_layout(control_box, layout);
+    }
     for (guint index = 0; index < json_array_get_length(order); index++) {
         const char *id = json_node_get_string(json_array_get_element(order, index));
         JsonNode *control = json_object_get_member(controls, id);
@@ -142,6 +160,8 @@ on_activate(GtkApplication *application, gpointer user_data)
         gtk_box_append(GTK_BOX(root_box), status);
     }
     gtk_window_set_child(GTK_WINDOW(window), root_box);
+    control_renderer_update_layouts(width);
+    gtk_widget_add_tick_callback(window, on_window_tick, NULL, NULL);
     gtk_window_present(GTK_WINDOW(window));
     json_object_unref(root);
 }
@@ -151,7 +171,7 @@ main(int argc, char **argv)
 {
     (void)argc;
     GtkApplication *application =
-        gtk_application_new("org.omni.starter", G_APPLICATION_DEFAULT_FLAGS);
+        gtk_application_new("org.allwhither.starter", G_APPLICATION_DEFAULT_FLAGS);
     g_signal_connect(application, "activate", G_CALLBACK(on_activate), NULL);
     int status = g_application_run(G_APPLICATION(application), 1, argv);
     g_object_unref(application);

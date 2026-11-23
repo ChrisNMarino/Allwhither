@@ -108,9 +108,58 @@ function validateControl(control) {
         requireString(id, `panel.children[${index}]`),
       );
       break;
+    case "group":
+      if (!Array.isArray(control.children)) {
+        throw new Error("group.children must be an array.");
+      }
+      control.children.forEach((id, index) =>
+        requireString(id, `group.children[${index}]`),
+      );
+      validateLayout(control.layout ?? { type: "vertical" }, ["vertical", "horizontal"], "group.layout");
+      break;
     default:
       throw new Error(`Unsupported control type: ${control.type}`);
   }
+}
+
+export function validateLayout(layout, types, name) {
+  if (layout === null || typeof layout !== "object" || Array.isArray(layout) ||
+      !types.includes(layout.type)) {
+    throw new Error(`${name}.type must be one of: ${types.join(", ")}.`);
+  }
+  if (layout.media === undefined) return;
+  if (layout.type === "center") {
+    throw new Error(`${name}.media is not supported for a center layout.`);
+  }
+  if (!Array.isArray(layout.media)) {
+    throw new Error(`${name}.media must be an array.`);
+  }
+  layout.media.forEach((rule, index) => {
+    const ruleName = `${name}.media[${index}]`;
+    if (rule === null || typeof rule !== "object" || Array.isArray(rule) ||
+        !["vertical", "horizontal"].includes(rule.type)) {
+      throw new Error(`${ruleName}.type must be 'vertical' or 'horizontal'.`);
+    }
+    for (const key of ["minWidth", "maxWidth"]) {
+      if (rule[key] !== undefined && (!isInt32(rule[key]) || rule[key] < 0)) {
+        throw new Error(`${ruleName}.${key} must be a non-negative integer.`);
+      }
+    }
+    if (rule.minWidth === undefined && rule.maxWidth === undefined) {
+      throw new Error(`${ruleName} needs minWidth or maxWidth.`);
+    }
+  });
+}
+
+export function resolveLayoutType(layout, width) {
+  let type = layout.type;
+  for (const rule of layout.media ?? []) {
+    if ((rule.minWidth === undefined || width >= rule.minWidth) &&
+        (rule.maxWidth === undefined || width <= rule.maxWidth)) {
+      type = rule.type;
+    }
+  }
+  return type;
 }
 
 function validateActions(control) {
@@ -177,7 +226,7 @@ function validateControlTree(order, controls) {
     visiting.add(id);
     const control = controls[id];
     validateControl(control);
-    if (control.type === "scrollPanel" || control.type === "panel") {
+    if (["scrollPanel", "panel", "group"].includes(control.type)) {
       control.children.forEach(visit);
     }
     visiting.delete(id);
@@ -219,7 +268,6 @@ export function validateUi(ui) {
     Array.isArray(ui) ||
     layout === null ||
     typeof layout !== "object" ||
-    !["vertical", "center"].includes(layout.type) ||
     !Array.isArray(layout.children) ||
     typeof ui.window?.title !== "string" ||
     !isInt32(ui.window.width) ||
@@ -244,6 +292,7 @@ export function validateUi(ui) {
     validateOptionalColor(ui.theme.backgroundColor, "theme.backgroundColor");
     validateOptionalColor(ui.theme.foregroundColor, "theme.foregroundColor");
   }
+  validateLayout(layout, ["vertical", "horizontal", "center"], "window.layout");
   validateControlTree(layout.children, ui.controls);
   validateMenus(ui.menus);
   return ui;

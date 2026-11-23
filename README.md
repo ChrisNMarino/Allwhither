@@ -1,20 +1,27 @@
-# omni
+# Allwhither
 
-omni is a small cross-platform UI starter: shared `.omni` files use JSON to
+Allwhither is a small cross-platform UI starter: shared `.json` files use JSON to
 describe an application and each platform builds its UI with native controls.
 
 ## Shared UI
 
 Each project lives under `projects/` and uses
-`projects/<project>/<project>.omni` as its entry point. Platform implementations
+`projects/<project>/<project>.json` as its entry point. Platform implementations
 live under `platform/`. The `example` project
-includes `ui.omni`. Included objects are merged in order, including nested
+includes `ui.json`. Included objects are merged in order, including nested
 objects such as `ui.controls`. When both files set the same property, the
 including file wins. Arrays are replaced rather than concatenated, except
 `scripts`, which is concatenated. UI configuration lives under the top-level `ui` object. The main
 window's `layout` lists the root control IDs in display order; nested panels
-list child IDs the same way. Layout type `vertical` stacks controls; `center`
-centers them. `window.width` and `window.height` set the Linux and Windows
+list child IDs the same way. Layout type `vertical` stacks controls,
+`horizontal` places them side by side in equal-width columns, and `center`
+centers them. A layout may add a `media` array of responsive rules, like CSS
+media queries: `{ "minWidth": 720, "type": "horizontal" }`. `minWidth` and
+`maxWidth` are inclusive window widths (pixels on web, Linux and Windows; dp on
+Android), at least one is required, and when several rules match, the last one
+wins. Rules only switch between `vertical` and `horizontal`, and `center`
+layouts do not support `media`. The `example` project switches to two columns
+at 720 wide. `window.width` and `window.height` set the Linux and Windows
 window size. Android and web fill the screen or browser window. Set
 `window.fullscreen` to `true` for a fullscreen window.
 Supported controls are buttons, labels, combo boxes, text fields, checkboxes,
@@ -39,6 +46,7 @@ shown in the status area when selected. The control fields are:
 | `slider` | `label`, `min`, `max`, `value` |
 | `scrollPanel` | `label`, `height`, `children` (control IDs) |
 | `panel` | `label`, `children` (control IDs). A panel is a page. Panels may be left out of `window.layout.children` and mounted later |
+| `group` | `children` (control IDs), optional `layout` (`type` `vertical` or `horizontal`, optional `media`; defaults to vertical). An unlabeled container for arranging controls |
 
 Controls can define JavaScript handlers by event. Script paths are relative to
 the application entry file's directory (the project directory here):
@@ -54,7 +62,7 @@ Every platform evaluates action scripts in one shared JavaScript global.
 JavaScript that no action names goes in the optional top-level `scripts` array.
 Those files are evaluated in that same global before action scripts, and they
 do not need to define a handler. Other scripts can call their functions and
-read their variables. Each path is relative to the `.omni` file that lists it.
+read their variables. Each path is relative to the `.json` file that lists it.
 Included files may list `scripts` as well. Those lists are joined in include
 order, the including file's scripts follow, and a repeated path is evaluated
 once.
@@ -114,7 +122,7 @@ the entries panel lists the saved records.
 ## Run
 
 A project is a directory under `projects/` whose entry file is
-`projects/<project>/<project>.omni`. Choose the platform and project from the
+`projects/<project>/<project>.json`. Choose the platform and project from the
 repository root. Nothing under `platform/` needs to change.
 
 ```sh

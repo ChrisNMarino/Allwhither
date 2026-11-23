@@ -5,7 +5,7 @@ function sendHttpRequest(dom) {
   var options = { timeout: 15000 };
   if (method === "POST" || method === "PUT" || method === "PATCH") {
     options.headers = { "Content-Type": "application/json" };
-    options.body = JSON.stringify({ source: "omni", method: method });
+    options.body = JSON.stringify({ source: "allwhither", method: method });
   }
   dom.setStatus("Sending " + method + " request...");
   dom.setValue("http-result", "");
@@ -55,7 +55,7 @@ function saveFile(dom) {
   var content = dom.getValue("http-result") || "";
   dom.setStatus("Saving file...");
   api.file.save({
-    name: "omni-output.txt",
+    name: "allwhither-output.txt",
     content: content,
     filters: [
       { name: "Text Files", extensions: ["txt", "json", "js", "md"] }

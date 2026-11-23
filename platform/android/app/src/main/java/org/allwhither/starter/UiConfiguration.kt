@@ -1,4 +1,4 @@
-package org.omni.starter
+package org.allwhither.starter
 
 import android.graphics.Color
 import java.io.File
@@ -18,15 +18,13 @@ internal class UiConfiguration(
     }
 
     fun load(): JSONObject {
-        val application = loadConfiguration("$project.omni")
+        val application = loadConfiguration("$project.json")
         applicationName(application)
         val ui = application.getJSONObject("ui")
         val window = ui.getJSONObject("window")
         val layout = window.getJSONObject("layout")
-        val layoutType = requiredString(layout, "type")
-        if (layoutType != "vertical" && layoutType != "center") {
-            throw IllegalArgumentException("window.layout.type must be 'vertical' or 'center'.")
-        }
+        validateLayout(layout, allowCenter = true, name = "window.layout")
+        val layoutType = layout.getString("type")
         optionalBoolean(window, "fullscreen")
         positiveInt(window, "width")
         positiveInt(window, "height")
@@ -153,7 +151,7 @@ internal class UiConfiguration(
         visiting.add(id)
         val control = controls.getJSONObject(id)
         validateControl(control)
-        if (control.getString("type") == "scrollPanel" || control.getString("type") == "panel") {
+        if (control.getString("type") in setOf("scrollPanel", "panel", "group")) {
             val children = control.getJSONArray("children")
             for (index in 0 until children.length()) {
                 visitControl(requiredControlId(children.get(index)), controls, visited, visiting)
@@ -207,6 +205,15 @@ internal class UiConfiguration(
                     requiredControlId(children.get(index))
                 }
             }
+            "group" -> {
+                if (control.has("layout")) {
+                    validateLayout(control.opt("layout"), allowCenter = false, name = "group.layout")
+                }
+                val children = control.getJSONArray("children")
+                for (index in 0 until children.length()) {
+                    requiredControlId(children.get(index))
+                }
+            }
             "panel" -> {
                 requiredString(control, "label")
                 val children = control.getJSONArray("children")
@@ -217,6 +224,55 @@ internal class UiConfiguration(
             else -> throw IllegalArgumentException("Unsupported control type.")
         }
     }
+
+    internal fun validateLayout(layout: Any?, allowCenter: Boolean, name: String) {
+        val types = if (allowCenter) listOf("vertical", "horizontal", "center")
+            else listOf("vertical", "horizontal")
+        val definition = layout as? JSONObject
+        val type = definition?.opt("type") as? String
+        if (definition == null || type !in types) {
+            throw IllegalArgumentException("$name.type must be one of: ${types.joinToString(", ")}.")
+        }
+        if (!definition.has("media")) return
+        if (type == "center") {
+            throw IllegalArgumentException("$name.media is not supported for a center layout.")
+        }
+        val media = definition.opt("media") as? JSONArray
+            ?: throw IllegalArgumentException("$name.media must be an array.")
+        for (index in 0 until media.length()) {
+            val ruleName = "$name.media[$index]"
+            val rule = media.opt(index) as? JSONObject
+            val ruleType = rule?.opt("type") as? String
+            if (rule == null || (ruleType != "vertical" && ruleType != "horizontal")) {
+                throw IllegalArgumentException("$ruleName.type must be 'vertical' or 'horizontal'.")
+            }
+            for (key in listOf("minWidth", "maxWidth")) {
+                if (rule.has(key) && ((rule.opt(key) as? Int) ?: -1) < 0) {
+                    throw IllegalArgumentException("$ruleName.$key must be a non-negative integer.")
+                }
+            }
+            if (!rule.has("minWidth") && !rule.has("maxWidth")) {
+                throw IllegalArgumentException("$ruleName needs minWidth or maxWidth.")
+            }
+        }
+    }
+
+    internal fun resolveLayoutType(layout: JSONObject?, widthDp: Int): String {
+        var type = layout?.optString("type").takeUnless { it.isNullOrEmpty() } ?: "vertical"
+        val media = layout?.optJSONArray("media") ?: return type
+        for (index in 0 until media.length()) {
+            val rule = media.getJSONObject(index)
+            if (widthDp >= rule.optInt("minWidth", 0) &&
+                widthDp <= rule.optInt("maxWidth", Int.MAX_VALUE)) {
+                type = rule.getString("type")
+            }
+        }
+        return type
+    }
+
+    internal fun orientationFor(layout: JSONObject?, widthDp: Int): Int =
+        if (resolveLayoutType(layout, widthDp) == "horizontal") android.widget.LinearLayout.HORIZONTAL
+        else android.widget.LinearLayout.VERTICAL
 
     private fun validateActions(control: JSONObject) {
         if (!control.has("actions")) return
