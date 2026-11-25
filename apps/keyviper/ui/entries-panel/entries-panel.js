@@ -1,41 +1,42 @@
 
-function onEntrySelected(dom) {
-  var next = dom.getSelectedIndex("entry-list");
+function onEntrySelectedCompact(dom) {
+  onEntrySelected(dom, "entry-list-compact");
+}
+
+function onEntrySelectedWide(dom) {
+  onEntrySelected(dom, "entry-list-wide");
+}
+
+function onEntrySelected(dom, controlId) {
+  var next = Math.max(-1, dom.getSelectedIndex(controlId) - 1);
   if (next === vaultFile.index) {
     return;
   }
-  commitEntry(dom);
+  var changed = commitEntry(dom);
   vaultFile.index = next;
-  if (next < 0 || next >= vaultFile.entries.length) {
-    clearEntry(dom);
-    return;
-  }
-  showEntry(dom);
-}
-
-function newEntry(dom) {
-  commitEntry(dom);
-  vaultFile.entries.push({
-    title: "New entry",
-    username: "",
-    password: "",
-    notes: ""
-  });
-  vaultFile.index = vaultFile.entries.length - 1;
-  vaultFile.dirty = true;
   refreshEntries(dom);
-  writeVault(dom);
+  if (changed) {
+    writeVault(dom);
+  }
 }
 
 function saveEntry(dom) {
-  if (vaultFile.index < 0 || vaultFile.index >= vaultFile.entries.length) {
-    dom.setStatus("Choose New to add an entry.");
+  var changed;
+  if (vaultFile.index < 0) {
+    vaultFile.entries.push(entryFromForm(dom));
+    vaultFile.index = vaultFile.entries.length - 1;
+    vaultFile.dirty = true;
+    changed = true;
+  } else if (vaultFile.index >= vaultFile.entries.length) {
+    dom.setStatus("Select an entry before saving.");
     return;
+  } else {
+    changed = commitEntry(dom);
   }
-  if (commitEntry(dom)) {
-    refreshEntries(dom);
+  refreshEntries(dom);
+  if (changed) {
+    writeVault(dom);
   }
-  writeVault(dom);
 }
 
 function deleteEntry(dom) {
@@ -48,12 +49,6 @@ function deleteEntry(dom) {
     vaultFile.index = vaultFile.entries.length - 1;
   }
   vaultFile.dirty = true;
-  refreshEntries(dom);
-  writeVault(dom);
-}
-
-function saveVault(dom) {
-  commitEntry(dom);
   refreshEntries(dom);
   writeVault(dom);
 }

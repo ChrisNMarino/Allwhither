@@ -10,14 +10,10 @@
 static gboolean
 on_window_tick(GtkWidget *window, GdkFrameClock *clock, gpointer user_data)
 {
-    static int last_width = 0;
     (void)clock;
     (void)user_data;
     int width = gtk_widget_get_width(window);
-    if (width > 0 && width != last_width) {
-        last_width = width;
-        control_renderer_update_layouts(width);
-    }
+    control_renderer_update_layouts(width);
     return G_SOURCE_CONTINUE;
 }
 
@@ -80,12 +76,6 @@ on_activate(GtkApplication *application, gpointer user_data)
         gtk_window_fullscreen(GTK_WINDOW(window));
     }
     GtkWidget *root_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
-    if (!fullscreen_center) {
-        gtk_widget_set_margin_top(root_box, 12);
-        gtk_widget_set_margin_bottom(root_box, 12);
-        gtk_widget_set_margin_start(root_box, 16);
-        gtk_widget_set_margin_end(root_box, 16);
-    }
 
     GtkWidget *status = gtk_label_new("Ready");
     gtk_widget_set_halign(status, GTK_ALIGN_START);
@@ -105,23 +95,15 @@ on_activate(GtkApplication *application, gpointer user_data)
     g_object_set_data_full(G_OBJECT(window), "allwhither-action-runtime",
                            runtime, action_runtime_free);
     action_runtime_set_window(runtime, GTK_WINDOW(window));
-    GtkWidget *heading = NULL;
     GtkWidget *menu_bar = NULL;
-    if (!fullscreen_center) {
+    if (!fullscreen_center && json_array_get_length(menus) > 0) {
         menu_bar = menu_renderer_create(application, menus, status);
         gtk_box_append(GTK_BOX(root_box), menu_bar);
-        heading = gtk_label_new(title);
-        gtk_widget_add_css_class(heading, "title-2");
-        gtk_widget_set_halign(heading, GTK_ALIGN_START);
-        gtk_box_append(GTK_BOX(root_box), heading);
     }
     if (window_background != NULL || window_foreground != NULL) {
         control_renderer_style_widget(window, window_background, window_foreground);
         control_renderer_style_widget(root_box, window_background, window_foreground);
         control_renderer_style_widget(status, NULL, window_foreground);
-        if (heading != NULL) {
-            control_renderer_style_widget(heading, NULL, window_foreground);
-        }
         if (menu_bar != NULL) {
             control_renderer_style_tree(menu_bar, window_background, window_foreground);
         }
@@ -145,7 +127,9 @@ on_activate(GtkApplication *application, gpointer user_data)
             GtkWidget *rendered = gtk_widget_get_last_child(control_box);
             gtk_widget_set_halign(rendered, GTK_ALIGN_CENTER);
             gtk_widget_set_valign(rendered, GTK_ALIGN_CENTER);
-            gtk_widget_set_vexpand(rendered, TRUE);
+            gtk_widget_set_vexpand(
+                rendered, !json_object_has_member(
+                    json_node_get_object(control), "height"));
         }
     }
     if (fullscreen_center) {

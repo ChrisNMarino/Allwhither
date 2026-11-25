@@ -66,6 +66,8 @@ public sealed class UiDom
 
     public void setText(string id, string text) => SetText(id, text);
 
+    public void setVisible(string id, bool visible) => Element(id).Visible = visible;
+
     public string? GetValue(string id)
     {
         Control control = Element(id);

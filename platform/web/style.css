@@ -10,17 +10,17 @@ body {
 body {
   margin: 0;
   display: flex;
-  min-height: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
   font-family: system-ui, sans-serif;
 }
 
 #window {
+  position: fixed;
+  inset: 0;
   width: 100%;
-  height: 100%;
-  min-height: 100%;
   max-height: none;
   flex: 1 1 auto;
-  padding: 24px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -33,6 +33,7 @@ body {
   inset: 0;
   width: 100%;
   min-height: 100vh;
+  min-height: 100dvh;
   max-height: none;
   padding: 0;
   align-items: stretch;
@@ -57,13 +58,8 @@ body {
   min-width: 0;
 }
 
-h1,
 h2 {
   margin: 0;
-}
-
-h1 {
-  font-size: 1.25rem;
 }
 
 .control-list {
@@ -83,7 +79,9 @@ h1 {
 }
 
 .field {
-  justify-content: space-between;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
 }
 
 .field input,
@@ -91,6 +89,17 @@ h1 {
 .field textarea {
   min-width: 0;
   flex: 1;
+}
+
+.field select[size] {
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.slider-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .check-field,
@@ -124,10 +133,14 @@ output {
 
 .control-label {
   margin: 0;
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .view-panel {
-  width: 100%;
+  width: auto;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -160,6 +173,10 @@ output {
   display: flex;
   gap: 8px;
   align-items: flex-start;
+}
+
+#menus[hidden] {
+  display: none;
 }
 
 .menu {

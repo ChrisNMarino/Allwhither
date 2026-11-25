@@ -30,6 +30,7 @@ internal static class Program
             bool fullscreen = UiDefinition.OptionalBoolean(window, "fullscreen");
             bool fullscreenCenter = fullscreen && layoutType == "center";
             JsonElement menus = UiDefinition.GetArray(ui, "menus");
+            bool hasMenus = menus.GetArrayLength() > 0;
             JsonElement controls = UiDefinition.GetObject(ui, "controls");
             JsonElement controlOrder = UiDefinition.GetArray(layout, "children");
             UiDefinition.ValidateMenus(menus);
@@ -56,7 +57,7 @@ internal static class Program
             actionRuntime.Prepare();
 
             var controlRenderer = new ControlRenderer(
-                controls, status, dom, actionRuntime, width - 48, theme);
+                controls, status, dom, actionRuntime, width, theme);
             if (layoutType == "center")
             {
                 var centeredLayout = new TableLayoutPanel
@@ -81,6 +82,16 @@ internal static class Program
                 }
                 dom.AttachMount(centeredControls, controlRenderer.Render);
                 centeredLayout.Controls.Add(centeredControls, 0, 0);
+                void RelayoutCentered()
+                {
+                    controlRenderer.ApplyWidth(
+                        centeredControls,
+                        Math.Max(1, centeredLayout.ClientSize.Width),
+                        form.ClientSize.Width,
+                        centeredLayout.ClientSize.Height);
+                }
+                centeredLayout.SizeChanged += (_, _) => RelayoutCentered();
+                RelayoutCentered();
                 if (fullscreenCenter)
                 {
                     form.Controls.Add(centeredLayout);
@@ -91,31 +102,32 @@ internal static class Program
                     {
                         Dock = DockStyle.Fill,
                         ColumnCount = 1,
-                        RowCount = 3
+                        RowCount = hasMenus ? 3 : 2
                     };
                     applicationLayout.ColumnStyles.Add(
                         new ColumnStyle(SizeType.Percent, 100));
-                    applicationLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+                    if (hasMenus)
+                    {
+                        applicationLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+                    }
                     applicationLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
                     applicationLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-                    var header = new FlowLayoutPanel
+                    if (hasMenus)
                     {
-                        AutoSize = true,
-                        Dock = DockStyle.Fill,
-                        FlowDirection = FlowDirection.TopDown,
-                        WrapContents = false
-                    };
-                    form.MainMenuStrip = MenuRenderer.Create(menus, status);
-                    header.Controls.Add(form.MainMenuStrip);
-                    header.Controls.Add(new Label
-                    {
-                        Text = title,
-                        Font = new Font(SystemFonts.DefaultFont.FontFamily, 14),
-                        AutoSize = true
-                    });
-                    applicationLayout.Controls.Add(header, 0, 0);
-                    applicationLayout.Controls.Add(centeredLayout, 0, 1);
-                    applicationLayout.Controls.Add(statusStrip, 0, 2);
+                        var header = new FlowLayoutPanel
+                        {
+                            AutoSize = true,
+                            Dock = DockStyle.Fill,
+                            FlowDirection = FlowDirection.TopDown,
+                            WrapContents = false
+                        };
+                        form.MainMenuStrip = MenuRenderer.Create(menus, status);
+                        header.Controls.Add(form.MainMenuStrip);
+                        applicationLayout.Controls.Add(header, 0, 0);
+                    }
+                    int controlsRow = hasMenus ? 1 : 0;
+                    applicationLayout.Controls.Add(centeredLayout, 0, controlsRow);
+                    applicationLayout.Controls.Add(statusStrip, 0, controlsRow + 1);
                     form.Controls.Add(applicationLayout);
                 }
             }
@@ -126,16 +138,8 @@ internal static class Program
                     Dock = DockStyle.Fill,
                     AutoScroll = true,
                     FlowDirection = FlowDirection.TopDown,
-                    WrapContents = false,
-                    Padding = new Padding(12)
+                    WrapContents = false
                 };
-                controlList.Controls.Add(new Label
-                {
-                    Text = title,
-                    Font = new Font(SystemFonts.DefaultFont.FontFamily, 14),
-                    AutoSize = true,
-                    Margin = new Padding(3, 3, 3, 10)
-                });
                 var body = new FlowLayoutPanel
                 {
                     AutoSize = true,
@@ -153,13 +157,19 @@ internal static class Program
                 dom.AttachMount(controlList, controlRenderer.Render);
                 form.Controls.Add(controlList);
                 form.Controls.Add(statusStrip);
-                form.MainMenuStrip = MenuRenderer.Create(menus, status);
-                form.Controls.Add(form.MainMenuStrip);
+                if (hasMenus)
+                {
+                    form.MainMenuStrip = MenuRenderer.Create(menus, status);
+                    form.Controls.Add(form.MainMenuStrip);
+                }
                 void Relayout()
                 {
                     controlList.SuspendLayout();
                     controlRenderer.ApplyWidth(
-                        controlList, Math.Max(200, form.ClientSize.Width - 48), form.ClientSize.Width);
+                        controlList,
+                        Math.Max(1, controlList.ClientSize.Width),
+                        form.ClientSize.Width,
+                        Math.Max(1, controlList.ClientSize.Height));
                     controlList.ResumeLayout(true);
                 }
                 form.ClientSizeChanged += (_, _) => Relayout();
@@ -206,4 +216,5 @@ internal static class Program
             }
         }
     }
+
 }

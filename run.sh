@@ -5,7 +5,7 @@ root_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
 available_projects() {
   local dir name
-  for dir in "$root_dir"/projects/*/; do
+  for dir in "$root_dir"/apps/*/; do
     [[ -d "$dir" ]] || continue
     name="$(basename "$dir")"
     if [[ -f "${dir}${name}.json" ]]; then
@@ -18,7 +18,7 @@ usage() {
   cat <<EOF
 Usage: ./run.sh [linux|windows|android|web] [project]
 
-A project is a directory under projects/ with an entry file named <project>.json.
+A project is a directory under apps/ with an entry file named <project>.json.
 Available projects: $(available_projects | paste -sd ' ' -)
 
 If either argument is omitted, the script prompts for it.
@@ -75,7 +75,7 @@ case "$platform" in
 esac
 
 if [[ ! "$project" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] ||
-   [[ ! -f "$root_dir/projects/$project/$project.json" ]]; then
+   [[ ! -f "$root_dir/apps/$project/$project.json" ]]; then
   echo "Unknown Allwhither project '$project'." >&2
   echo "Available projects: $(available_projects | paste -sd ' ' -)" >&2
   exit 2

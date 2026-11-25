@@ -6,7 +6,7 @@ plugins {
 val allwhitherProject = providers.gradleProperty("allwhitherProject").orElse("example").get()
 val repoDir = rootProject.layout.projectDirectory.dir("../..")
 val pythonExe = if (System.getProperty("os.name").startsWith("Windows")) "python" else "python3"
-val projectEntry = repoDir.file("projects/$allwhitherProject/$allwhitherProject.json").asFile
+val projectEntry = repoDir.file("apps/$allwhitherProject/$allwhitherProject.json").asFile
 require(allwhitherProject.matches(Regex("^[A-Za-z0-9][A-Za-z0-9._-]*$"))) {
     "allwhitherProject must be a project directory name."
 }
@@ -15,7 +15,7 @@ require(projectEntry.isFile) {
 }
 val generateEmbeddedResources = tasks.register<Exec>("generateEmbeddedResources") {
     val embedScript = repoDir.file("tools/embed_resources.py")
-    val projectDirectory = repoDir.dir("projects/$allwhitherProject")
+    val projectDirectory = repoDir.dir("apps/$allwhitherProject")
     val generatedFile = layout.buildDirectory.file(
         "generated/allwhitherEmbedded/org/allwhither/starter/EmbeddedResourceData.kt")
     inputs.file(embedScript)
@@ -36,7 +36,7 @@ val generateEmbeddedResources = tasks.register<Exec>("generateEmbeddedResources"
 
 val generateAppName = tasks.register<Exec>("generateAppName") {
     val embedScript = repoDir.file("tools/embed_resources.py")
-    val projectDirectory = repoDir.dir("projects/$allwhitherProject")
+    val projectDirectory = repoDir.dir("apps/$allwhitherProject")
     val generatedFile = layout.buildDirectory.file(
         "generated/allwhitherRes/values/strings.xml")
     inputs.file(embedScript)

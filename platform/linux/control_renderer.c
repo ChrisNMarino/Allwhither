@@ -20,9 +20,139 @@ typedef struct {
 } ButtonBinding;
 
 typedef struct {
+    ActionRuntime *runtime;
+    char *control_id;
+    char *event_type;
+} DeferredAction;
+
+typedef struct {
     StatusBinding *binding;
     char *option;
 } RadioBinding;
+
+/* GTK size requests are minimums, so maxWidth needs a container that caps allocation. */
+typedef struct {
+    GtkWidget parent_instance;
+    GtkWidget *child;
+    int max_width;
+    gboolean centered;
+} MaxWidthContainer;
+
+typedef struct {
+    GtkWidgetClass parent_class;
+} MaxWidthContainerClass;
+
+G_DEFINE_TYPE(MaxWidthContainer, max_width_container, GTK_TYPE_WIDGET)
+
+static int
+max_width_container_total_width(MaxWidthContainer *container)
+{
+    return container->max_width +
+        gtk_widget_get_margin_start(container->child) +
+        gtk_widget_get_margin_end(container->child);
+}
+
+static void
+max_width_container_measure(GtkWidget *widget,
+                            GtkOrientation orientation,
+                            int for_size,
+                            int *minimum,
+                            int *natural,
+                            int *minimum_baseline,
+                            int *natural_baseline)
+{
+    MaxWidthContainer *container = (MaxWidthContainer *) widget;
+    int child_for_size = for_size;
+    if (orientation == GTK_ORIENTATION_VERTICAL && for_size >= 0) {
+        child_for_size = MIN(for_size, max_width_container_total_width(container));
+    }
+    gtk_widget_measure(container->child, orientation, child_for_size,
+                       minimum, natural, minimum_baseline, natural_baseline);
+    if (orientation == GTK_ORIENTATION_HORIZONTAL) {
+        int limit = max_width_container_total_width(container);
+        if (minimum != NULL) *minimum = MIN(*minimum, limit);
+        if (natural != NULL) *natural = MIN(*natural, limit);
+    }
+}
+
+static GtkSizeRequestMode
+max_width_container_get_request_mode(GtkWidget *widget)
+{
+    MaxWidthContainer *container = (MaxWidthContainer *) widget;
+    return gtk_widget_get_request_mode(container->child);
+}
+
+static void
+max_width_container_size_allocate(GtkWidget *widget,
+                                  int width,
+                                  int height,
+                                  int baseline)
+{
+    MaxWidthContainer *container = (MaxWidthContainer *) widget;
+    int child_width = MIN(width, max_width_container_total_width(container));
+    int x = container->centered ? (width - child_width) / 2 : 0;
+    graphene_point_t point = GRAPHENE_POINT_INIT(x, 0);
+    GskTransform *transform = gsk_transform_translate(NULL, &point);
+    gtk_widget_allocate(container->child, child_width, height, baseline, transform);
+}
+
+static void
+max_width_container_snapshot(GtkWidget *widget, GtkSnapshot *snapshot)
+{
+    MaxWidthContainer *container = (MaxWidthContainer *) widget;
+    gtk_widget_snapshot_child(widget, container->child, snapshot);
+}
+
+static void
+max_width_container_dispose(GObject *object)
+{
+    MaxWidthContainer *container = (MaxWidthContainer *) object;
+    if (container->child != NULL) {
+        gtk_widget_unparent(container->child);
+        container->child = NULL;
+    }
+    G_OBJECT_CLASS(max_width_container_parent_class)->dispose(object);
+}
+
+static void
+max_width_container_class_init(MaxWidthContainerClass *class)
+{
+    GtkWidgetClass *widget_class = GTK_WIDGET_CLASS(class);
+    G_OBJECT_CLASS(class)->dispose = max_width_container_dispose;
+    widget_class->get_request_mode = max_width_container_get_request_mode;
+    widget_class->measure = max_width_container_measure;
+    widget_class->size_allocate = max_width_container_size_allocate;
+    widget_class->snapshot = max_width_container_snapshot;
+    gtk_widget_class_set_css_name(widget_class, "maxwidthcontainer");
+}
+
+static void
+max_width_container_init(MaxWidthContainer *container)
+{
+    (void) container;
+}
+
+static GtkWidget *
+max_width_container_new(GtkWidget *child, int max_width, gboolean centered)
+{
+    MaxWidthContainer *container =
+        g_object_new(max_width_container_get_type(), NULL);
+    container->child = child;
+    container->max_width = max_width;
+    container->centered = centered;
+    gtk_widget_set_parent(child, GTK_WIDGET(container));
+    return GTK_WIDGET(container);
+}
+
+static void
+max_width_container_set_max_width(GtkWidget *widget, int max_width)
+{
+    MaxWidthContainer *container = (MaxWidthContainer *) widget;
+    if (container->max_width != max_width) {
+        container->max_width = max_width;
+        gtk_widget_queue_resize(widget);
+    }
+}
 
 static void
 free_status_binding(gpointer user_data, GClosure *closure)
@@ -44,6 +174,10 @@ free_button_binding(gpointer user_data, GClosure *closure)
     g_free(binding);
 }
 
+static void defer_action(ActionRuntime *runtime,
+                         const char *control_id,
+                         const char *event_type);
+
 static void
 set_status(StatusBinding *binding, const char *value)
 {
@@ -62,7 +196,7 @@ on_button_clicked(GtkButton *button, gpointer user_data)
     ButtonBinding *binding = user_data;
     gtk_button_set_label(button, binding->clicked_text);
     gtk_label_set_text(GTK_LABEL(binding->status), binding->clicked_text);
-    action_runtime_invoke(binding->runtime, binding->control_id, "click");
+    defer_action(binding->runtime, binding->control_id, "click");
 }
 
 static void
@@ -92,6 +226,42 @@ on_entry_changed(GtkEditable *editable, gpointer user_data)
         return;
     }
     set_status(user_data, gtk_editable_get_text(editable));
+}
+
+static gboolean
+invoke_deferred_action(gpointer user_data)
+{
+    DeferredAction *action = user_data;
+    action_runtime_invoke(action->runtime, action->control_id, action->event_type);
+    return G_SOURCE_REMOVE;
+}
+
+static void
+free_deferred_action(gpointer user_data)
+{
+    DeferredAction *action = user_data;
+    g_free(action->control_id);
+    g_free(action->event_type);
+    g_free(action);
+}
+
+static void
+defer_action(ActionRuntime *runtime, const char *control_id, const char *event_type)
+{
+    DeferredAction *action = g_new0(DeferredAction, 1);
+    action->runtime = runtime;
+    action->control_id = g_strdup(control_id);
+    action->event_type = g_strdup(event_type);
+    g_idle_add_full(G_PRIORITY_DEFAULT, invoke_deferred_action,
+                    action, free_deferred_action);
+}
+
+static void
+on_entry_activated(GtkEntry *entry, gpointer user_data)
+{
+    (void) entry;
+    StatusBinding *binding = user_data;
+    defer_action(binding->runtime, binding->control_id, "enter");
 }
 
 static void
@@ -288,6 +458,62 @@ control_renderer_style_widget(GtkWidget *widget,
 }
 
 static void
+style_border(GtkWidget *widget, const char *style, int width, const char *color)
+{
+    if (widget == NULL || style == NULL || color == NULL ||
+        g_str_equal(style, "none")) {
+        return;
+    }
+    static guint border_id;
+    char *class_name = g_strdup_printf("allwhither-border-%u", ++border_id);
+    char *css = g_strdup_printf(".%s { border: %dpx %s %s; }",
+                                class_name, width, style, color);
+    GtkCssProvider *provider = gtk_css_provider_new();
+    gtk_css_provider_load_from_string(provider, css);
+    gtk_style_context_add_provider_for_display(
+        gtk_widget_get_display(widget),
+        GTK_STYLE_PROVIDER(provider),
+        GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+    gtk_widget_add_css_class(widget, class_name);
+    g_object_unref(provider);
+    g_free(css);
+    g_free(class_name);
+}
+
+static void
+style_font(GtkWidget *widget, int font_size)
+{
+    static guint font_id;
+    char *class_name = g_strdup_printf("allwhither-font-%u", ++font_id);
+    char *css = g_strdup_printf(".%s { font-size: %dpx; }", class_name, font_size);
+    GtkCssProvider *provider = gtk_css_provider_new();
+    gtk_css_provider_load_from_string(provider, css);
+    gtk_style_context_add_provider_for_display(
+        gtk_widget_get_display(widget),
+        GTK_STYLE_PROVIDER(provider),
+        GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+    gtk_widget_add_css_class(widget, class_name);
+    g_object_unref(provider);
+    g_free(css);
+    g_free(class_name);
+}
+
+static void
+style_font_tree(GtkWidget *widget, int font_size, gboolean is_root)
+{
+    if (!is_root &&
+        g_object_get_data(G_OBJECT(widget), "allwhither-control-root") != NULL) {
+        return;
+    }
+    style_font(widget, font_size);
+    for (GtkWidget *child = gtk_widget_get_first_child(widget);
+         child != NULL;
+         child = gtk_widget_get_next_sibling(child)) {
+        style_font_tree(child, font_size, FALSE);
+    }
+}
+
+static void
 remember_list_colors(GtkWidget *widget, const char *background, const char *foreground)
 {
     if (!GTK_IS_LIST_BOX(widget)) {
@@ -364,12 +590,48 @@ resolve_control_colors(JsonObject *spec, const char **background, const char **f
 }
 
 static GPtrArray *responsive_boxes = NULL;
+static GPtrArray *responsive_sizes = NULL;
+static GPtrArray *responsive_visibilities = NULL;
 static int responsive_width = 0;
 
 typedef struct {
     GtkWidget *box;
     JsonObject *layout;
 } ResponsiveBox;
+
+typedef struct {
+    GWeakRef control;
+    JsonArray *media;
+} ResponsiveVisibility;
+
+typedef struct {
+    GWeakRef control;
+    GWeakRef max_width_container;
+    GWeakRef parent;
+    int width;
+    int height;
+    double width_percent;
+    double height_percent;
+    gboolean has_width;
+    gboolean has_height;
+    gboolean has_max_width;
+    int max_width;
+    int horizontal_margin;
+    gboolean percent_width;
+    gboolean percent_height;
+    int last_parent_width;
+    int last_parent_height;
+} ResponsiveSize;
+
+static void
+free_responsive_size(gpointer data)
+{
+    ResponsiveSize *entry = data;
+    g_weak_ref_clear(&entry->control);
+    g_weak_ref_clear(&entry->max_width_container);
+    g_weak_ref_clear(&entry->parent);
+    g_free(entry);
+}
 
 static void
 apply_layout(ResponsiveBox *entry)
@@ -378,12 +640,21 @@ apply_layout(ResponsiveBox *entry)
         g_str_equal(ui_layout_resolve(entry->layout, responsive_width), "horizontal");
     gtk_orientable_set_orientation(GTK_ORIENTABLE(entry->box),
         horizontal ? GTK_ORIENTATION_HORIZONTAL : GTK_ORIENTATION_VERTICAL);
-    gtk_box_set_homogeneous(GTK_BOX(entry->box), horizontal);
+    gboolean has_fixed_width_child = FALSE;
+    for (GtkWidget *child = gtk_widget_get_first_child(entry->box);
+         child != NULL; child = gtk_widget_get_next_sibling(child)) {
+        has_fixed_width_child |= gtk_widget_get_visible(child) &&
+            g_object_get_data(G_OBJECT(child), "allwhither-fixed-width") != NULL;
+    }
+    gtk_box_set_homogeneous(GTK_BOX(entry->box),
+                            horizontal && !has_fixed_width_child);
     for (GtkWidget *child = gtk_widget_get_first_child(entry->box);
          child != NULL; child = gtk_widget_get_next_sibling(child)) {
         gboolean automatic =
             g_object_get_data(G_OBJECT(child), "allwhither-auto-hexpand") != NULL;
-        if (horizontal && !gtk_widget_get_hexpand(child)) {
+        gboolean fixed_width =
+            g_object_get_data(G_OBJECT(child), "allwhither-fixed-width") != NULL;
+        if (horizontal && !fixed_width && !gtk_widget_get_hexpand(child)) {
             gtk_widget_set_hexpand(child, TRUE);
             g_object_set_data(G_OBJECT(child), "allwhither-auto-hexpand", GINT_TO_POINTER(1));
         } else if (!horizontal && automatic) {
@@ -402,6 +673,30 @@ free_responsive_box(gpointer data)
     ResponsiveBox *entry = data;
     json_object_unref(entry->layout);
     g_free(entry);
+}
+
+static void
+free_responsive_visibility(gpointer data)
+{
+    ResponsiveVisibility *entry = data;
+    g_weak_ref_clear(&entry->control);
+    json_array_unref(entry->media);
+    g_free(entry);
+}
+
+static void
+track_responsive_visibility(GtkWidget *control, JsonArray *media)
+{
+    if (responsive_visibilities == NULL) {
+        responsive_visibilities = g_ptr_array_new_with_free_func(
+            free_responsive_visibility);
+    }
+    ResponsiveVisibility *entry = g_new0(ResponsiveVisibility, 1);
+    g_weak_ref_init(&entry->control, G_OBJECT(control));
+    entry->media = json_array_ref(media);
+    g_ptr_array_add(responsive_visibilities, entry);
+    gtk_widget_set_visible(control,
+        ui_control_media_visible(media, responsive_width));
 }
 
 static void
@@ -433,10 +728,114 @@ control_renderer_track_layout(GtkWidget *box, JsonObject *layout)
 void
 control_renderer_update_layouts(int width)
 {
-    responsive_width = width;
-    for (guint index = 0; responsive_boxes != NULL && index < responsive_boxes->len; index++) {
-        apply_layout(g_ptr_array_index(responsive_boxes, index));
+    if (responsive_width != width) {
+        responsive_width = width;
+        for (guint index = 0;
+             responsive_boxes != NULL && index < responsive_boxes->len; index++) {
+            apply_layout(g_ptr_array_index(responsive_boxes, index));
+        }
     }
+    for (guint index = 0;
+         responsive_visibilities != NULL && index < responsive_visibilities->len;) {
+        ResponsiveVisibility *entry =
+            g_ptr_array_index(responsive_visibilities, index);
+        GtkWidget *control = g_weak_ref_get(&entry->control);
+        if (control == NULL) {
+            g_ptr_array_remove_index_fast(responsive_visibilities, index);
+            continue;
+        }
+        gtk_widget_set_visible(control,
+            ui_control_media_visible(entry->media, responsive_width));
+        g_object_unref(control);
+        index++;
+    }
+    for (guint index = 0; responsive_sizes != NULL && index < responsive_sizes->len;) {
+        ResponsiveSize *entry = g_ptr_array_index(responsive_sizes, index);
+        GtkWidget *control = g_weak_ref_get(&entry->control);
+        GtkWidget *max_width_container = entry->has_max_width
+            ? g_weak_ref_get(&entry->max_width_container) : NULL;
+        GtkWidget *parent = g_weak_ref_get(&entry->parent);
+        if (control == NULL || parent == NULL ||
+            (entry->has_max_width && max_width_container == NULL)) {
+            if (control != NULL) g_object_unref(control);
+            if (max_width_container != NULL) g_object_unref(max_width_container);
+            if (parent != NULL) g_object_unref(parent);
+            g_ptr_array_remove_index_fast(responsive_sizes, index);
+            continue;
+        }
+        int parent_width = gtk_widget_get_width(parent);
+        int parent_height = gtk_widget_get_height(parent);
+        gboolean dimensions_ready =
+            (!entry->percent_width || parent_width > 0) &&
+            (!entry->percent_height || parent_height > 0) &&
+            (!entry->has_max_width || parent_width > 0);
+        if (dimensions_ready &&
+            (parent_width != entry->last_parent_width ||
+             parent_height != entry->last_parent_height)) {
+            int requested_width = entry->has_width ? entry->width : -1;
+            int requested_height = entry->has_height ? entry->height : -1;
+            if (entry->percent_width) {
+                requested_width = (int) (parent_width * entry->width_percent / 100.0 + 0.5);
+            }
+            if (entry->percent_height) {
+                requested_height = (int) (parent_height * entry->height_percent / 100.0 + 0.5);
+            }
+            if (entry->has_max_width) {
+                int available_width = MAX(1, parent_width -
+                    entry->horizontal_margin);
+                int width_limit = MIN(entry->max_width, available_width);
+                max_width_container_set_max_width(max_width_container, width_limit);
+                if (requested_width > width_limit) {
+                    requested_width = width_limit;
+                }
+            }
+            gtk_widget_set_size_request(control, requested_width, requested_height);
+            entry->last_parent_width = parent_width;
+            entry->last_parent_height = parent_height;
+        }
+        g_object_unref(control);
+        if (max_width_container != NULL) g_object_unref(max_width_container);
+        g_object_unref(parent);
+        index++;
+    }
+}
+
+static void
+track_responsive_size(GtkWidget *control,
+                      GtkWidget *parent,
+                      gboolean has_width,
+                      int width,
+                      gboolean percent_width,
+                      double width_percent,
+                      gboolean has_height,
+                      int height,
+                      gboolean percent_height,
+                      double height_percent,
+                      gboolean has_max_width,
+                      int max_width,
+                      GtkWidget *max_width_widget)
+{
+    if (responsive_sizes == NULL) {
+        responsive_sizes = g_ptr_array_new_with_free_func(free_responsive_size);
+    }
+    ResponsiveSize *entry = g_new0(ResponsiveSize, 1);
+    g_weak_ref_init(&entry->control, G_OBJECT(control));
+    g_weak_ref_init(&entry->max_width_container,
+                    max_width_widget == NULL ? NULL : G_OBJECT(max_width_widget));
+    g_weak_ref_init(&entry->parent, G_OBJECT(parent));
+    entry->width = width;
+    entry->height = height;
+    entry->width_percent = width_percent;
+    entry->height_percent = height_percent;
+    entry->has_width = has_width;
+    entry->has_height = has_height;
+    entry->has_max_width = has_max_width;
+    entry->max_width = max_width;
+    entry->horizontal_margin = gtk_widget_get_margin_start(control) +
+        gtk_widget_get_margin_end(control);
+    entry->percent_width = percent_width;
+    entry->percent_height = percent_height;
+    g_ptr_array_add(responsive_sizes, entry);
 }
 
 static void
@@ -448,13 +847,136 @@ append_control(GtkWidget *parent,
 {
     const char *background = NULL;
     const char *foreground = NULL;
+    gboolean has_width = json_object_has_member(spec, "width");
+    gboolean has_height =
+        json_object_has_member(spec, "height") &&
+        !g_str_equal(json_object_get_string_member(spec, "type"), "scrollPanel");
+    gboolean has_max_width = json_object_has_member(spec, "maxWidth");
+    int max_width = 0;
+    if (has_max_width) {
+        ui_read_integer(spec, "maxWidth", &max_width);
+    }
+    gboolean width_is_percent = FALSE;
+    gboolean height_is_percent = FALSE;
+    double width_value = 0;
+    double height_value = 0;
+    if (has_width) {
+        ui_read_dimension(spec, "width", &width_is_percent, &width_value);
+    }
+    if (has_height) {
+        ui_read_dimension(spec, "height", &height_is_percent, &height_value);
+    }
+    int requested_width = has_width && !width_is_percent ? (int) width_value : -1;
+    int requested_height = has_height && !height_is_percent ? (int) height_value : -1;
+    if (has_max_width && requested_width > max_width) {
+        requested_width = max_width;
+    }
+    if (has_width || has_height) {
+        gtk_widget_set_size_request(control, requested_width, requested_height);
+    }
+    if (has_width) {
+        gtk_widget_set_hexpand(control, FALSE);
+        gtk_widget_set_halign(control,
+            json_object_has_member(spec, "center") &&
+            json_object_get_boolean_member(spec, "center")
+                ? GTK_ALIGN_CENTER : GTK_ALIGN_START);
+    }
+    if (has_height) {
+        gtk_widget_set_vexpand(control, FALSE);
+        gtk_widget_set_valign(control, GTK_ALIGN_START);
+    }
+    gboolean centered = FALSE;
+    if (json_object_has_member(spec, "center")) {
+        ui_read_boolean(spec, "center", &centered);
+    }
+    if (centered) {
+        gtk_widget_set_hexpand(control, FALSE);
+        gtk_widget_set_halign(control, GTK_ALIGN_CENTER);
+    }
+    if (has_max_width) {
+        gtk_widget_set_hexpand(control, TRUE);
+        gtk_widget_set_halign(control, GTK_ALIGN_FILL);
+    }
+    if (json_object_has_member(spec, "margin")) {
+        int margin;
+        if (ui_read_integer(spec, "margin", &margin) && margin >= 0) {
+            gtk_widget_set_margin_top(control, margin);
+            gtk_widget_set_margin_bottom(control, margin);
+            gtk_widget_set_margin_start(control, margin);
+            gtk_widget_set_margin_end(control, margin);
+        }
+    }
+    if (json_object_has_member(spec, "padding")) {
+        int padding;
+        if (ui_read_integer(spec, "padding", &padding) && padding >= 0) {
+            GtkCssProvider *provider = gtk_css_provider_new();
+            char *css = g_strdup_printf("* { padding: %dpx; }", padding);
+            gtk_css_provider_load_from_string(provider, css);
+            gtk_style_context_add_provider(
+                gtk_widget_get_style_context(control),
+                GTK_STYLE_PROVIDER(provider),
+                GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+            g_free(css);
+            g_object_unref(provider);
+        }
+    }
+    if (json_object_has_member(spec, "borderStyle") ||
+        json_object_has_member(spec, "borderColor") ||
+        json_object_has_member(spec, "borderWidth")) {
+        const char *style = "solid";
+        const char *color = "#000000";
+        int border_width = 1;
+        ui_read_string(spec, "borderStyle", &style);
+        ui_read_string(spec, "borderColor", &color);
+        ui_read_integer(spec, "borderWidth", &border_width);
+        style_border(control, style, border_width, color);
+    }
+    if (json_object_has_member(spec, "fontSize")) {
+        int font_size;
+        ui_read_integer(spec, "fontSize", &font_size);
+        style_font_tree(control, font_size, TRUE);
+    }
     resolve_control_colors(spec, &background, &foreground);
     g_object_set_data(G_OBJECT(control), "allwhither-control-root", GINT_TO_POINTER(1));
     if (background != NULL || foreground != NULL) {
         style_control_tree(control, background, foreground, TRUE);
     }
     action_runtime_register(runtime, control_id, control);
-    gtk_box_append(GTK_BOX(parent), control);
+    GtkWidget *rendered = control;
+    if (has_max_width) {
+        rendered = max_width_container_new(control, max_width, centered);
+        gtk_widget_set_hexpand(rendered, TRUE);
+        gtk_widget_set_halign(rendered, GTK_ALIGN_FILL);
+    }
+    GtkWidget *size_parent = parent;
+    GtkWidget *child = rendered;
+    if (GTK_IS_ORIENTABLE(parent) &&
+        gtk_orientable_get_orientation(GTK_ORIENTABLE(parent)) ==
+            GTK_ORIENTATION_HORIZONTAL &&
+        (centered || width_is_percent || height_is_percent || has_max_width)) {
+        GtkWidget *slot = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+        gtk_widget_set_hexpand(slot, !has_max_width);
+        gtk_widget_set_halign(rendered, GTK_ALIGN_FILL);
+        if (has_max_width) {
+            g_object_set_data(G_OBJECT(slot), "allwhither-fixed-width",
+                              GINT_TO_POINTER(1));
+        }
+        gtk_box_append(GTK_BOX(slot), rendered);
+        child = slot;
+        size_parent = slot;
+    }
+    gtk_box_append(GTK_BOX(parent), child);
+    if (json_object_has_member(spec, "media")) {
+        track_responsive_visibility(
+            rendered, json_object_get_array_member(spec, "media"));
+    }
+    if (width_is_percent || height_is_percent || has_max_width) {
+        track_responsive_size(control, size_parent,
+                              has_width, requested_width, width_is_percent, width_value,
+                              has_height, requested_height, height_is_percent, height_value,
+                              has_max_width, max_width,
+                              has_max_width ? rendered : NULL);
+    }
 }
 
 gboolean
@@ -471,7 +993,10 @@ control_renderer_render(const char *control_id,
         const char *text;
         ui_read_string(spec, "text", &text);
         GtkWidget *label = gtk_label_new(text);
+        gtk_label_set_wrap(GTK_LABEL(label), TRUE);
+        gtk_label_set_wrap_mode(GTK_LABEL(label), PANGO_WRAP_WORD_CHAR);
         gtk_widget_set_halign(label, GTK_ALIGN_START);
+        gtk_widget_set_hexpand(label, TRUE);
         append_control(parent, label, spec, control_id, runtime);
         return TRUE;
     }
@@ -535,6 +1060,15 @@ control_renderer_render(const char *control_id,
             new_status_binding(status, label, runtime, control_id, "input");
         g_signal_connect_data(entry, "changed", G_CALLBACK(on_entry_changed),
                               binding, free_status_binding, 0);
+        JsonNode *actions_node = json_object_get_member(spec, "actions");
+        if (actions_node != NULL && JSON_NODE_HOLDS_OBJECT(actions_node) &&
+            json_object_has_member(json_node_get_object(actions_node), "enter")) {
+            StatusBinding *enter_binding =
+                new_status_binding(status, label, runtime, control_id, NULL);
+            g_signal_connect_data(entry, "activate",
+                                  G_CALLBACK(on_entry_activated),
+                                  enter_binding, free_status_binding, 0);
+        }
         append_control(parent, labeled_control(label, entry), spec, control_id, runtime);
         return TRUE;
     }
@@ -663,9 +1197,12 @@ control_renderer_render(const char *control_id,
     if (g_str_equal(type, "scrollPanel")) {
         const char *label;
         int height;
+        gboolean is_percent;
+        double height_value;
         JsonArray *children;
         ui_read_string(spec, "label", &label);
-        ui_read_integer(spec, "height", &height);
+        ui_read_dimension(spec, "height", &is_percent, &height_value);
+        height = is_percent ? -1 : (int) height_value;
         ui_read_array(spec, "children", &children);
         GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
         GtkWidget *caption = gtk_label_new(label);
@@ -673,6 +1210,13 @@ control_renderer_render(const char *control_id,
         gtk_box_append(GTK_BOX(box), caption);
         GtkWidget *scroll = gtk_scrolled_window_new();
         gtk_widget_set_size_request(scroll, -1, height);
+        if (is_percent) {
+            gtk_widget_set_vexpand(scroll, TRUE);
+            track_responsive_size(scroll, parent,
+                                  FALSE, -1, FALSE, 0,
+                                  TRUE, -1, TRUE, height_value,
+                                  FALSE, 0, NULL);
+        }
         gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroll),
                                        GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
         GtkWidget *child_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
@@ -711,17 +1255,11 @@ control_renderer_render(const char *control_id,
         return TRUE;
     }
     if (g_str_equal(type, "panel")) {
-        const char *label;
         JsonArray *children;
-        ui_read_string(spec, "label", &label);
         ui_read_array(spec, "children", &children);
         GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
         gtk_widget_set_hexpand(box, TRUE);
         gtk_widget_set_vexpand(box, TRUE);
-        GtkWidget *caption = gtk_label_new(label);
-        gtk_widget_add_css_class(caption, "title-3");
-        gtk_widget_set_halign(caption, GTK_ALIGN_START);
-        gtk_box_append(GTK_BOX(box), caption);
         for (guint index = 0; index < json_array_get_length(children); index++) {
             const char *child_id =
                 json_node_get_string(json_array_get_element(children, index));

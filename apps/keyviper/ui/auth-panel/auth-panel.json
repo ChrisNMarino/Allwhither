@@ -1,0 +1,79 @@
+{
+    "ui": {
+        "controls": {
+            "auth-panel": {
+                "type": "panel",
+                "backgroundColor": "#505050",
+                "center": true,
+                "margin": 30,
+                "maxWidth": 500,
+                "padding": 20,
+                "borderStyle": "solid",
+                "borderColor": "#D3D3D3",
+                "borderWidth": 1,
+                "children": [
+                    "auth-panel-title",
+                    "password-file",
+                    "master-password",
+                    "password-actions"
+                ]
+            },
+            "auth-panel-title": {
+                "type": "label",
+                "fontSize": 30,
+                "text": "Vault password"
+            },
+            "password-file": {
+                "type": "label",
+                "text": "Vault"
+            },
+            "master-password": {
+                "type": "textField",
+                "label": "Password",
+                "value": "",
+                "placeholder": "Vault password",
+                "password": true,
+                "actions": {
+                    "enter": {
+                        "file": "ui/auth-panel/auth-panel.js",
+                        "function": "continueVault"
+                    }
+                }
+            },
+            "password-actions": {
+                "type": "group",
+                "center": true,
+                "padding": 20,
+                "layout": { "type": "horizontal" },
+                "children": [
+                    "password-back",
+                    "password-action"
+                ]
+            },
+            "password-action": {
+                "type": "button",
+                "backgroundColor": "#102010",
+                "borderStyle": "solid",
+                "borderColor": "#D3D3D3",
+                "borderWidth": 1,
+                "text": "Continue",
+                "clickedText": "Continue",
+                "actions": {
+                    "click": { "file": "ui/auth-panel/auth-panel.js", "function": "continueVault" }
+                }
+            },
+            "password-back": {
+                "type": "button",
+                "backgroundColor": "#102010",
+                "borderStyle": "solid",
+                "borderColor": "#D3D3D3",
+                "borderWidth": 1,
+                "text": "Back",
+                "clickedText": "Back",
+                "actions": {
+                    "click": { "file": "ui/auth-panel/auth-panel.js", "function": "backToFiles" }
+                }
+            }
+        }
+    }
+}

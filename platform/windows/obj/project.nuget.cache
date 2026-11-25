@@ -1,0 +1,12 @@
+{
+  "version": 2,
+  "dgSpecHash": "0eHf6gNrJxA=",
+  "success": true,
+  "projectFilePath": "/home/chris/code/Allwhither/platform/windows/Allwhither.Windows.csproj",
+  "expectedPackageFiles": [
+    "/home/chris/.nuget/packages/acornima/1.1.1/acornima.1.1.1.nupkg.sha512",
+    "/home/chris/.nuget/packages/jint/4.2.0/jint.4.2.0.nupkg.sha512",
+    "/home/chris/.nuget/packages/microsoft.windowsdesktop.app.ref/8.0.34/microsoft.windowsdesktop.app.ref.8.0.34.nupkg.sha512"
+  ],
+  "logs": []
+}

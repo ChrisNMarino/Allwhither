@@ -3,21 +3,22 @@
     "id": "org.allwhither.keyviper",
     "name": "Key Viper"
   },
-  "includes": ["file-panel.json", "entries-panel.json"],
+  "includes": [
+    "ui/file-panel/file-panel.json",
+    "ui/auth-panel/auth-panel.json",
+    "ui/entries-panel/entries-panel.json"
+  ],
   "scripts": ["keyviper.js"],
   "ui": {
     "window": {
       "title": "Key Viper",
-      "width": 480,
-      "height": 800,
-      "backgroundColor": "#1B4332",
+      "width": 900,
+      "height": 700,
+      "backgroundColor": "#102010",
       "layout": {
         "type": "vertical",
         "children": ["file-panel"]
       }
-    },
-    "theme": {
-      "backgroundColor": "#4A4A4A"
     },
     "menus": []
   }

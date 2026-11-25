@@ -34,7 +34,6 @@ async function startApplication() {
   ));
 
   document.title = ui.window.title;
-  document.getElementById("title").textContent = ui.window.title;
   const windowElement = document.getElementById("window");
   const chrome = chromeColors(ui.window);
   if (chrome.background) {
@@ -54,8 +53,7 @@ async function startApplication() {
     ui.window.layout.type === "center";
   windowElement.classList.toggle("fullscreen", ui.window.fullscreen === true);
 
-  document.getElementById("title").hidden = fullscreenCenter;
-  document.getElementById("menus").hidden = fullscreenCenter;
+  document.getElementById("menus").hidden = fullscreenCenter || ui.menus.length === 0;
   status.hidden = fullscreenCenter;
   renderMenus(ui.menus, status, document.getElementById("menus"));
   trackResponsiveLayout(controls, ui.window.layout);

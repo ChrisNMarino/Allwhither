@@ -29,7 +29,6 @@ class MainActivity : Activity() {
             val window = ui.getJSONObject("window")
             val layout = window.getJSONObject("layout")
             val layoutType = configuration.requiredString(layout, "type")
-            val applicationName = configuration.applicationName(application)
             val title = configuration.requiredString(window, "title")
             val fullscreen = configuration.optionalBoolean(window, "fullscreen")
             val fullscreenCenter = fullscreen && layoutType == "center"
@@ -38,7 +37,7 @@ class MainActivity : Activity() {
             val theme = configuration.theme(ui)
             val chrome = configuration.chromeColors(window)
 
-            this.title = applicationName
+            this.title = title
             status = TextView(this).apply {
                 text = "Ready"
                 contentDescription = "Status"
@@ -58,26 +57,14 @@ class MainActivity : Activity() {
             val root = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 chrome.background?.let { setBackgroundColor(it) }
-                setPadding(
-                    if (fullscreenCenter) 0 else dp(16),
-                    if (fullscreenCenter) 0 else dp(12),
-                    if (fullscreenCenter) 0 else dp(16),
-                    if (fullscreenCenter) 0 else dp(12)
-                )
             }
-            if (!fullscreenCenter) {
+            if (!fullscreenCenter && menus.length() > 0) {
                 val menuBar = LinearLayout(this).apply {
                     orientation = LinearLayout.HORIZONTAL
                     gravity = Gravity.START
                 }
                 MenuRenderer(this, status, configuration).addTo(menuBar, menus, chrome)
                 root.addView(menuBar, matchWrap())
-                root.addView(TextView(this).apply {
-                    text = title
-                    textSize = 20f
-                    setPadding(0, dp(8), 0, dp(8))
-                    chrome.foreground?.let { setTextColor(it) }
-                }, matchWrap())
             }
 
             val controlList = LinearLayout(this).apply {

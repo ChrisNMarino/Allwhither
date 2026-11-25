@@ -2,9 +2,15 @@ package org.allwhither.starter
 
 import android.app.Activity
 import android.content.res.ColorStateList
+import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.LayerDrawable
+import android.util.TypedValue
 import android.view.Gravity
+import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
+import android.view.inputmethod.EditorInfo
 import android.text.InputType
 import android.widget.ArrayAdapter
 import android.widget.Button
@@ -18,6 +24,7 @@ import android.widget.ScrollView
 import android.widget.SeekBar
 import android.widget.Spinner
 import android.widget.TextView
+import org.json.JSONArray
 import org.json.JSONObject
 
 internal class ControlRenderer(
@@ -39,6 +46,7 @@ internal class ControlRenderer(
             orientation = LinearLayout.VERTICAL
         }
         val type = uiConfiguration.requiredString(control, "type")
+        var percentHeightTarget: View? = null
         when (type) {
             "label" -> controlRoot.addView(TextView(activity).apply {
                 text = uiConfiguration.requiredString(control, "text")
@@ -83,6 +91,19 @@ internal class ControlRenderer(
                     setSingleLine(true)
                     setText(uiConfiguration.stringValue(control, "value", allowEmpty = true))
                     hint = uiConfiguration.optionalString(control, "placeholder")
+                    if (control.optJSONObject("actions")?.has("enter") == true) {
+                        imeOptions = EditorInfo.IME_ACTION_DONE
+                        setOnEditorActionListener { _, actionId, event ->
+                            val enterPressed =
+                                actionId == EditorInfo.IME_ACTION_DONE ||
+                                    (event?.keyCode == KeyEvent.KEYCODE_ENTER &&
+                                        event.action == KeyEvent.ACTION_UP)
+                            if (enterPressed) {
+                                actionRuntime.invoke(controlId, "enter")
+                            }
+                            enterPressed
+                        }
+                    }
                     if (isPassword) {
                         transformationMethod = android.text.method.PasswordTransformationMethod.getInstance()
                     }
@@ -190,12 +211,6 @@ internal class ControlRenderer(
                 ))
             }
             "panel" -> {
-                val label = uiConfiguration.requiredString(control, "label")
-                controlRoot.addView(TextView(activity).apply {
-                    text = label
-                    textSize = 18f
-                    setPadding(0, dp(4), 0, dp(8))
-                }, matchWrap())
                 val children = control.getJSONArray("children")
                 for (index in 0 until children.length()) {
                     render(children.getString(index), controlRoot)
@@ -212,6 +227,7 @@ internal class ControlRenderer(
             }
             "scrollPanel" -> {
                 val label = uiConfiguration.requiredString(control, "label")
+                val panelHeight = uiConfiguration.requiredDimension(control, "height")
                 controlRoot.addView(fieldLabel(label), matchWrap())
                 val childList = LinearLayout(activity).apply {
                     orientation = LinearLayout.VERTICAL
@@ -221,16 +237,18 @@ internal class ControlRenderer(
                 for (index in 0 until children.length()) {
                     render(children.getString(index), childList)
                 }
-                controlRoot.addView(ScrollView(activity).apply {
+                val scrollView = ScrollView(activity).apply {
                     isFillViewport = true
                     addView(childList, ViewGroup.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.WRAP_CONTENT
                     ))
-                }, LinearLayout.LayoutParams(
+                }
+                controlRoot.addView(scrollView, LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
-                    dp(uiConfiguration.positiveInt(control, "height"))
+                    panelHeight.pixels?.let(::dp) ?: 0
                 ))
+                percentHeightTarget = scrollView
             }
             else -> throw IllegalArgumentException("Unsupported control type.")
         }
@@ -239,15 +257,166 @@ internal class ControlRenderer(
         if (palette != null) {
             applyColors(controlRoot, palette.background, palette.foreground)
         }
+        if (control.has("fontSize")) {
+            applyFontSize(controlRoot, uiConfiguration.positiveInt(control, "fontSize").toFloat())
+        }
+        applyBorder(
+            control,
+            if (type == "button") controlRoot.getChildAt(0) else controlRoot
+        )
         dom.register(controlId, controlRoot)
-        val params = when {
-            parent.orientation == LinearLayout.HORIZONTAL -> LinearLayout.LayoutParams(
-                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f
-            )
-            centered && type == "label" -> wrapWrap()
-            else -> matchWrap()
+        val widthDimension = uiConfiguration.optionalDimension(control, "width")
+        val heightDimension = if (type == "scrollPanel") {
+            null
+        } else {
+            uiConfiguration.optionalDimension(control, "height")
+        }
+        val isCentered = uiConfiguration.optionalBoolean(control, "center")
+        val maxWidth = if (control.has("maxWidth")) {
+            uiConfiguration.positiveInt(control, "maxWidth")
+        } else {
+            null
+        }
+        if (isCentered) controlRoot.gravity = Gravity.CENTER_HORIZONTAL
+        val width = widthDimension?.pixels?.let(::dp)
+            ?: if (widthDimension?.percent != null) 0
+            else if (centered && type == "label") ViewGroup.LayoutParams.WRAP_CONTENT
+            else if (parent.orientation == LinearLayout.HORIZONTAL && !isCentered) 0
+            else if (isCentered) ViewGroup.LayoutParams.WRAP_CONTENT
+            else ViewGroup.LayoutParams.MATCH_PARENT
+        val height = heightDimension?.pixels?.let(::dp)
+            ?: if (heightDimension?.percent != null) 0
+            else ViewGroup.LayoutParams.WRAP_CONTENT
+        val params = LinearLayout.LayoutParams(
+            width,
+            height,
+            if (widthDimension == null && parent.orientation == LinearLayout.HORIZONTAL && !isCentered) 1f else 0f
+        )
+        if (isCentered) params.gravity = Gravity.CENTER_HORIZONTAL
+        if (control.has("margin")) {
+            val margin = dp(uiConfiguration.nonNegativeInt(control, "margin"))
+            params.setMargins(margin, margin, margin, margin)
+        }
+        if (control.has("padding")) {
+            val padding = dp(uiConfiguration.nonNegativeInt(control, "padding"))
+            controlRoot.setPadding(padding, padding, padding, padding)
         }
         parent.addView(controlRoot, params)
+        if (control.has("media")) {
+            observeResponsiveVisibility(
+                controlRoot, parent, control.getJSONArray("media")
+            )
+        }
+        if (isCentered && parent.orientation == LinearLayout.HORIZONTAL) {
+            centerInHorizontalParent(controlRoot, parent, params.leftMargin, params.rightMargin)
+        }
+        observePercentDimensions(controlRoot, parent, widthDimension, heightDimension, maxWidth)
+        percentHeightTarget?.let { target ->
+            observePercentDimensions(
+                target,
+                parent,
+                null,
+                uiConfiguration.requiredDimension(control, "height")
+            )
+        }
+    }
+
+    private fun centerInHorizontalParent(
+        view: View,
+        parent: LinearLayout,
+        baseLeft: Int,
+        baseRight: Int
+    ) {
+        fun update() {
+            val params = view.layoutParams as? LinearLayout.LayoutParams ?: return
+            val available = parent.width - parent.paddingLeft - parent.paddingRight
+            if (available <= 0) return
+            val extra = ((available - view.width - baseLeft - baseRight) / 2).coerceAtLeast(0)
+            val left = baseLeft + extra
+            val right = baseRight + extra
+            if (params.leftMargin != left || params.rightMargin != right) {
+                params.setMargins(left, params.topMargin, right, params.bottomMargin)
+                view.layoutParams = params
+            }
+        }
+        parent.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> update() }
+        parent.post { update() }
+    }
+
+    private fun observeResponsiveVisibility(
+        view: View,
+        parent: ViewGroup,
+        media: JSONArray
+    ) {
+        fun update() {
+            val widthDp = activity.resources.configuration.screenWidthDp
+            val visibility = if (
+                uiConfiguration.resolveControlVisibility(media, widthDp)
+            ) View.VISIBLE else View.GONE
+            if (view.visibility != visibility) view.visibility = visibility
+        }
+        parent.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> update() }
+        parent.post { update() }
+    }
+
+    private fun observePercentDimensions(
+        view: View,
+        parent: ViewGroup,
+        width: UiDimension?,
+        height: UiDimension?,
+        maxWidth: Int? = null
+    ) {
+        if (width?.percent == null && height?.percent == null && maxWidth == null) return
+        val initialParams = view.layoutParams as? LinearLayout.LayoutParams ?: return
+        val initialWidth = initialParams.width
+        val initialWeight = initialParams.weight
+        val initialHorizontalMargins = initialParams.leftMargin + initialParams.rightMargin
+        fun update() {
+            val params = view.layoutParams as? LinearLayout.LayoutParams ?: return
+            var changed = false
+            val availableWidth = parent.width - parent.paddingLeft - parent.paddingRight
+            if (width?.percent != null) {
+                if (availableWidth > 0) {
+                    val target = width.resolve(availableWidth)
+                    if (params.width != target) {
+                        params.width = target
+                        changed = true
+                    }
+                }
+            }
+            if (maxWidth != null && availableWidth > 0) {
+                val available = (availableWidth - initialHorizontalMargins).coerceAtLeast(1)
+                val requestedWidth = when {
+                    width?.pixels != null -> dp(width.pixels)
+                    width?.percent != null -> width.resolve(availableWidth)
+                    initialWeight > 0f || initialWidth == ViewGroup.LayoutParams.MATCH_PARENT ->
+                        available
+                    else -> initialWidth
+                }
+                val target = minOf(dp(maxWidth), available, requestedWidth.takeIf { it > 0 } ?: available)
+                if (params.width != target) {
+                    params.width = target
+                    changed = true
+                }
+                if (params.weight != 0f) {
+                    params.weight = 0f
+                    changed = true
+                }
+            }
+            if (height?.percent != null) {
+                val available = parent.height - parent.paddingTop - parent.paddingBottom
+                if (available > 0) {
+                    val target = height.resolve(available)
+                    if (params.height != target) {
+                        params.height = target
+                        changed = true
+                    }
+                }
+            }
+            if (changed) view.layoutParams = params
+        }
+        parent.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> update() }
+        parent.post { update() }
     }
 
     private fun paletteFor(control: JSONObject): OptionPalette? {
@@ -256,6 +425,54 @@ internal class ControlRenderer(
         val foreground = explicit ?: background?.let { uiConfiguration.contrastForeground(it) }
         if (background == null && foreground == null) return null
         return OptionPalette(background, foreground)
+    }
+
+    private fun applyBorder(control: JSONObject, view: View) {
+        if (!control.has("borderStyle") &&
+            !control.has("borderColor") &&
+            !control.has("borderWidth")) return
+        val style = if (control.has("borderStyle")) {
+            uiConfiguration.optionalString(control, "borderStyle")
+        } else {
+            "solid"
+        }
+        if (style == "none") return
+        val borderUnits = if (control.has("borderWidth")) {
+            uiConfiguration.nonNegativeInt(control, "borderWidth")
+        } else {
+            1
+        }
+        val width = if (borderUnits == 0) 0 else dp(borderUnits).coerceAtLeast(1)
+        if (width == 0) return
+        val color = uiConfiguration.borderColor(control) ?: Color.BLACK
+        val stroke = GradientDrawable().apply {
+            setColor(Color.TRANSPARENT)
+            when (style) {
+                "dashed" -> setStroke(width, color, width * 4f, width * 2f)
+                "dotted" -> setStroke(width, color, width.toFloat(), width.toFloat())
+                else -> setStroke(width, color)
+            }
+        }
+        val background = view.background
+        view.background = if (background == null) {
+            stroke
+        } else {
+            LayerDrawable(arrayOf(background, stroke))
+        }
+    }
+
+    private fun applyFontSize(view: View, sizeInPixels: Float) {
+        if (view is TextView) {
+            view.setTextSize(TypedValue.COMPLEX_UNIT_PX, sizeInPixels)
+        }
+        if (view is ViewGroup) {
+            for (index in 0 until view.childCount) {
+                val child = view.getChildAt(index)
+                if (child.tag !== controlViewMarker) {
+                    applyFontSize(child, sizeInPixels)
+                }
+            }
+        }
     }
 
     private fun optionAdapter(

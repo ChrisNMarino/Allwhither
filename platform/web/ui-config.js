@@ -25,10 +25,69 @@ function validateOptionalColor(value, name) {
   }
 }
 
+function validateOptionalMargin(control) {
+  if (control.margin !== undefined) {
+    if (!isInt32(control.margin) || control.margin < 0) {
+      throw new Error("control.margin must be a non-negative integer.");
+    }
+  }
+}
+
+function validateOptionalPadding(control) {
+  if (control.padding !== undefined) {
+    if (!isInt32(control.padding) || control.padding < 0) {
+      throw new Error("control.padding must be a non-negative integer.");
+    }
+  }
+}
+
+function validateOptionalBorder(control) {
+  if (control.borderStyle !== undefined &&
+      !["solid", "dashed", "dotted", "none"].includes(control.borderStyle)) {
+    throw new Error("control.borderStyle must be solid, dashed, dotted, or none.");
+  }
+  validateOptionalColor(control.borderColor, "control.borderColor");
+  if (control.borderWidth !== undefined &&
+      (!isInt32(control.borderWidth) || control.borderWidth < 0)) {
+    throw new Error("control.borderWidth must be a non-negative integer.");
+  }
+}
+
+function validateDimension(value, name) {
+  if (isInt32(value) && value > 0) return;
+  if (typeof value === "string" && /^\d+(?:\.\d+)?%$/.test(value)) {
+    const percent = Number(value.slice(0, -1));
+    if (percent > 0 && percent <= 100) return;
+  }
+  throw new Error(`${name} must be a positive pixel value or a percentage greater than 0% and at most 100%.`);
+}
+
 function validateControl(control) {
   requireString(control.type, "control.type");
   validateOptionalColor(control.backgroundColor, "control.backgroundColor");
   validateOptionalColor(control.foregroundColor, "control.foregroundColor");
+  validateOptionalMargin(control);
+  validateOptionalPadding(control);
+  validateOptionalBorder(control);
+  if (control.fontSize !== undefined &&
+      (!isInt32(control.fontSize) || control.fontSize <= 0)) {
+    throw new Error("control.fontSize must be a positive integer.");
+  }
+  if (control.center !== undefined && typeof control.center !== "boolean") {
+    throw new Error("control.center must be a boolean.");
+  }
+  for (const dimension of ["width", "height"]) {
+    if (control[dimension] !== undefined) {
+      validateDimension(control[dimension], `control.${dimension}`);
+    }
+  }
+  if (control.maxWidth !== undefined &&
+      (!isInt32(control.maxWidth) || control.maxWidth <= 0)) {
+    throw new Error("control.maxWidth must be a positive integer.");
+  }
+  if (control.media !== undefined) {
+    validateControlMedia(control.media);
+  }
   validateActions(control);
 
   switch (control.type) {
@@ -61,6 +120,9 @@ function validateControl(control) {
       if (control.placeholder !== undefined && typeof control.placeholder !== "string") {
         throw new Error("textField.placeholder must be a string.");
       }
+      if (control.autocomplete !== undefined && typeof control.autocomplete !== "string") {
+        throw new Error("textField.autocomplete must be a string.");
+      }
       break;
     case "textArea":
       requireString(control.label, "textArea.label");
@@ -89,9 +151,7 @@ function validateControl(control) {
       break;
     case "scrollPanel":
       requireString(control.label, "scrollPanel.label");
-      if (!isInt32(control.height) || control.height <= 0) {
-        throw new Error("scrollPanel.height must be a positive integer.");
-      }
+      validateDimension(control.height, "scrollPanel.height");
       if (!Array.isArray(control.children)) {
         throw new Error("scrollPanel.children must be an array.");
       }
@@ -100,7 +160,6 @@ function validateControl(control) {
       );
       break;
     case "panel":
-      requireString(control.label, "panel.label");
       if (!Array.isArray(control.children)) {
         throw new Error("panel.children must be an array.");
       }
@@ -162,6 +221,42 @@ export function resolveLayoutType(layout, width) {
   return type;
 }
 
+function validateControlMedia(media) {
+  if (!Array.isArray(media)) {
+    throw new Error("control.media must be an array.");
+  }
+  for (const [index, rule] of media.entries()) {
+    const name = `control.media[${index}]`;
+    if (rule === null || typeof rule !== "object" || Array.isArray(rule)) {
+      throw new Error(`${name} must be an object.`);
+    }
+    const hasMin = rule.minWidth !== undefined;
+    const hasMax = rule.maxWidth !== undefined;
+    if (!hasMin && !hasMax) {
+      throw new Error(`${name} needs minWidth or maxWidth.`);
+    }
+    for (const key of ["minWidth", "maxWidth"]) {
+      if (rule[key] !== undefined && (!isInt32(rule[key]) || rule[key] < 0)) {
+        throw new Error(`${name}.${key} must be a non-negative integer.`);
+      }
+    }
+    if (typeof rule.visible !== "boolean") {
+      throw new Error(`${name}.visible must be a boolean.`);
+    }
+  }
+}
+
+export function resolveControlVisibility(media, width) {
+  let visible = true;
+  for (const rule of media ?? []) {
+    if ((rule.minWidth === undefined || width >= rule.minWidth) &&
+        (rule.maxWidth === undefined || width <= rule.maxWidth)) {
+      visible = rule.visible;
+    }
+  }
+  return visible;
+}
+
 function validateActions(control) {
   if (control.actions === undefined) {
     return;
@@ -177,7 +272,7 @@ function validateActions(control) {
   const eventTypes = {
     button: ["click"],
     comboBox: ["change"],
-    textField: ["input"],
+    textField: ["input", "enter"],
     textArea: ["input"],
     checkbox: ["change"],
     radioGroup: ["change"],

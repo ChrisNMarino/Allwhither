@@ -2,6 +2,7 @@
 
 #include "embedded_resources.h"
 
+#include <math.h>
 #include <string.h>
 
 gboolean
@@ -74,6 +75,55 @@ ui_read_array(JsonObject *object, const char *member, JsonArray **array)
 }
 
 gboolean
+ui_read_dimension(JsonObject *object,
+                  const char *member,
+                  gboolean *is_percent,
+                  double *value)
+{
+    if (!json_object_has_member(object, member)) {
+        return FALSE;
+    }
+    JsonNode *node = json_object_get_member(object, member);
+    if (JSON_NODE_HOLDS_VALUE(node) &&
+        json_node_get_value_type(node) == G_TYPE_INT64) {
+        gint64 number = json_node_get_int(node);
+        if (number <= 0 || number > G_MAXINT) {
+            return FALSE;
+        }
+        *is_percent = FALSE;
+        *value = (double) number;
+        return TRUE;
+    }
+    if (!JSON_NODE_HOLDS_VALUE(node) ||
+        json_node_get_value_type(node) != G_TYPE_STRING) {
+        return FALSE;
+    }
+    const char *text = json_node_get_string(node);
+    if (text == NULL || *text == '\0') {
+        return FALSE;
+    }
+    const char *cursor = text;
+    while (g_ascii_isdigit(*cursor)) cursor++;
+    if (cursor == text) return FALSE;
+    if (*cursor == '.') {
+        cursor++;
+        const char *fraction = cursor;
+        while (g_ascii_isdigit(*cursor)) cursor++;
+        if (cursor == fraction) return FALSE;
+    }
+    if (*cursor != '%' || cursor[1] != '\0') return FALSE;
+    char *end = NULL;
+    double percent = g_ascii_strtod(text, &end);
+    if (end == text || end == NULL || *end != '%' || end[1] != '\0' ||
+        !isfinite(percent) || percent <= 0.0 || percent > 100.0) {
+        return FALSE;
+    }
+    *is_percent = TRUE;
+    *value = percent;
+    return TRUE;
+}
+
+gboolean
 ui_layout_validate(JsonObject *layout, gboolean allow_center)
 {
     const char *type;
@@ -128,6 +178,48 @@ ui_layout_resolve(JsonObject *layout, int width)
         }
     }
     return type;
+}
+
+gboolean
+ui_control_media_validate(JsonArray *media)
+{
+    if (media == NULL) {
+        return FALSE;
+    }
+    for (guint index = 0; index < json_array_get_length(media); index++) {
+        JsonNode *node = json_array_get_element(media, index);
+        if (!JSON_NODE_HOLDS_OBJECT(node)) {
+            return FALSE;
+        }
+        JsonObject *rule = json_node_get_object(node);
+        gboolean visible;
+        int limit;
+        gboolean has_min = json_object_has_member(rule, "minWidth");
+        gboolean has_max = json_object_has_member(rule, "maxWidth");
+        if ((!has_min && !has_max) ||
+            !ui_read_boolean(rule, "visible", &visible) ||
+            (has_min && (!ui_read_integer(rule, "minWidth", &limit) || limit < 0)) ||
+            (has_max && (!ui_read_integer(rule, "maxWidth", &limit) || limit < 0))) {
+            return FALSE;
+        }
+    }
+    return TRUE;
+}
+
+gboolean
+ui_control_media_visible(JsonArray *media, int width)
+{
+    gboolean visible = TRUE;
+    for (guint index = 0; media != NULL && index < json_array_get_length(media); index++) {
+        JsonObject *rule = json_array_get_object_element(media, index);
+        if ((!json_object_has_member(rule, "minWidth") ||
+             width >= json_object_get_int_member(rule, "minWidth")) &&
+            (!json_object_has_member(rule, "maxWidth") ||
+             width <= json_object_get_int_member(rule, "maxWidth"))) {
+            visible = json_object_get_boolean_member(rule, "visible");
+        }
+    }
+    return visible;
 }
 
 static gboolean
@@ -209,6 +301,8 @@ validate_actions(JsonObject *control, const char *type)
              g_str_equal(name, "change")) ||
             ((g_str_equal(type, "textField") || g_str_equal(type, "textArea") ||
               g_str_equal(type, "slider")) && g_str_equal(name, "input"));
+        supported = supported ||
+            (g_str_equal(type, "textField") && g_str_equal(name, "enter"));
         JsonNode *action_node = json_object_get_member(actions, name);
         if (!supported || !JSON_NODE_HOLDS_OBJECT(action_node)) {
             valid = FALSE;
@@ -247,11 +341,74 @@ static gboolean
 validate_control(JsonObject *control)
 {
     const char *type;
+    gboolean dimension_is_percent;
+    double dimension_value;
+    gboolean center;
     if (control == NULL || !ui_read_string(control, "type", &type)) {
         return FALSE;
     }
+    const char *dimension_names[] = { "width", "height" };
+    for (guint index = 0; index < G_N_ELEMENTS(dimension_names); index++) {
+        if (json_object_has_member(control, dimension_names[index]) &&
+            !ui_read_dimension(control, dimension_names[index], &dimension_is_percent,
+                               &dimension_value)) {
+            return FALSE;
+        }
+    }
+    if (json_object_has_member(control, "center") &&
+        !ui_read_boolean(control, "center", &center)) {
+        return FALSE;
+    }
+    if (json_object_has_member(control, "margin")) {
+        int margin;
+        if (!ui_read_integer(control, "margin", &margin) || margin < 0) {
+            return FALSE;
+        }
+    }
+    if (json_object_has_member(control, "padding")) {
+        int padding;
+        if (!ui_read_integer(control, "padding", &padding) || padding < 0) {
+            return FALSE;
+        }
+    }
+    if (json_object_has_member(control, "fontSize")) {
+        int font_size;
+        if (!ui_read_integer(control, "fontSize", &font_size) || font_size <= 0) {
+            return FALSE;
+        }
+    }
+    if (json_object_has_member(control, "maxWidth")) {
+        int max_width;
+        if (!ui_read_integer(control, "maxWidth", &max_width) || max_width <= 0) {
+            return FALSE;
+        }
+    }
+    if (json_object_has_member(control, "media")) {
+        JsonArray *media;
+        if (!ui_read_array(control, "media", &media) ||
+            !ui_control_media_validate(media)) {
+            return FALSE;
+        }
+    }
+    if (json_object_has_member(control, "borderStyle")) {
+        const char *style;
+        if (!ui_read_string(control, "borderStyle", &style) ||
+            !(g_str_equal(style, "solid") ||
+              g_str_equal(style, "dashed") ||
+              g_str_equal(style, "dotted") ||
+              g_str_equal(style, "none"))) {
+            return FALSE;
+        }
+    }
+    if (json_object_has_member(control, "borderWidth")) {
+        int width;
+        if (!ui_read_integer(control, "borderWidth", &width) || width < 0) {
+            return FALSE;
+        }
+    }
     if (!color_member_is_valid(control, "backgroundColor") ||
-        !color_member_is_valid(control, "foregroundColor")) {
+        !color_member_is_valid(control, "foregroundColor") ||
+        !color_member_is_valid(control, "borderColor")) {
         return FALSE;
     }
     if (!validate_actions(control, type)) {
@@ -285,10 +442,13 @@ validate_control(JsonObject *control)
         const char *label;
         const char *value;
         const char *placeholder;
+        const char *autocomplete;
         return ui_read_string(control, "label", &label) &&
                ui_read_string_value(control, "value", &value) &&
                (!json_object_has_member(control, "placeholder") ||
-                ui_read_string_value(control, "placeholder", &placeholder));
+                ui_read_string_value(control, "placeholder", &placeholder)) &&
+               (!json_object_has_member(control, "autocomplete") ||
+                ui_read_string_value(control, "autocomplete", &autocomplete));
     }
     if (g_str_equal(type, "textArea")) {
         const char *label;
@@ -315,10 +475,10 @@ validate_control(JsonObject *control)
     }
     if (g_str_equal(type, "scrollPanel")) {
         const char *label;
-        int height;
         JsonArray *children;
         if (!ui_read_string(control, "label", &label) ||
-            !ui_read_integer(control, "height", &height) || height <= 0 ||
+            !ui_read_dimension(control, "height", &dimension_is_percent,
+                               &dimension_value) ||
             !ui_read_array(control, "children", &children)) {
             return FALSE;
         }
@@ -334,11 +494,9 @@ validate_control(JsonObject *control)
         return TRUE;
     }
     if (g_str_equal(type, "panel") || g_str_equal(type, "group")) {
-        const char *label;
         JsonArray *children;
         gboolean is_group = g_str_equal(type, "group");
-        if ((!is_group && !ui_read_string(control, "label", &label)) ||
-            !ui_read_array(control, "children", &children)) {
+        if (!ui_read_array(control, "children", &children)) {
             return FALSE;
         }
         if (is_group && json_object_has_member(control, "layout") &&

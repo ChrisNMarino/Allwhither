@@ -1,0 +1,160 @@
+{
+    "ui": {
+        "controls": {
+            "entries-panel": {
+                "type": "panel",
+                "backgroundColor": "#505050",
+                "margin": 10,
+                "padding": 5,
+                "borderStyle": "solid",
+                "borderColor": "#D3D3D3",
+                "borderWidth": 1,
+                "children": [
+                    "entries-panel-title",
+                    "vault-caption",
+                    "lock-vault",
+                    "entries-content"
+                ]
+            },
+            "entries-panel-title": {
+                "type": "label",
+                "fontSize": 30,
+                "text": "Entries"
+            },
+            "vault-caption": {
+                "type": "label",
+                "text": "No vault"
+            },
+            "entries-content": {
+                "type": "group",
+                "layout": {
+                    "type": "vertical",
+                    "media": [
+                        { "minWidth": 720, "type": "horizontal" }
+                    ]
+                },
+                "children": [
+                    "entry-navigation-compact",
+                    "entry-navigation-wide",
+                    "entry-editor"
+                ]
+            },
+            "entry-navigation-compact": {
+                "type": "group",
+                "media": [
+                    { "minWidth": 720, "visible": false }
+                ],
+                "children": ["entry-list-compact"]
+            },
+            "entry-navigation-wide": {
+                "type": "group",
+                "maxWidth": 300,
+                "media": [
+                    { "maxWidth": 719, "visible": false }
+                ],
+                "children": ["entry-list-wide"]
+            },
+            "entry-list-compact": {
+                "type": "comboBox",
+                "label": "Saved passwords",
+                "options": ["Add New"],
+                "selectedIndex": 0,
+                "actions": {
+                    "change": { "file": "ui/entries-panel/entries-panel.js", "function": "onEntrySelectedCompact" }
+                }
+            },
+            "entry-list-wide": {
+                "type": "list",
+                "label": "Saved passwords",
+                "options": ["Add New"],
+                "selectedIndex": 0,
+                "actions": {
+                    "change": { "file": "ui/entries-panel/entries-panel.js", "function": "onEntrySelectedWide" }
+                }
+            },
+            "entry-editor": {
+                "type": "group",
+                "children": [
+                    "entry-title",
+                    "entry-username",
+                    "entry-password",
+                    "entry-notes",
+                    "entry-list-actions"
+                ]
+            },
+            "entry-title": {
+                "type": "textField",
+                "label": "Title",
+                "value": "",
+                "placeholder": "Example: Mail"
+            },
+            "entry-username": {
+                "type": "textField",
+                "label": "Username",
+                "value": "",
+                "placeholder": "Name or email",
+                "autocomplete": "off"
+            },
+            "entry-password": {
+                "type": "textField",
+                "label": "Password",
+                "value": "",
+                "password": true,
+                "autocomplete": "new-password"
+            },
+            "entry-notes": {
+                "type": "textArea",
+                "label": "Notes",
+                "value": ""
+            },
+            "entry-list-actions": {
+                "type": "group",
+                "center": true,
+                "padding": 20,
+                "maxWidth": 500,
+                "layout": { "type": "horizontal" },
+                "children": [
+                    "save-entry",
+                    "delete-entry"
+                ]
+            },
+            "save-entry": {
+                "type": "button",
+                "backgroundColor": "#102010",
+                "borderStyle": "solid",
+                "borderColor": "#D3D3D3",
+                "borderWidth": 1,
+                "text": "Save entry",
+                "clickedText": "Save entry",
+                "actions": {
+                    "click": { "file": "ui/entries-panel/entries-panel.js", "function": "saveEntry" }
+                }
+            },
+            "delete-entry": {
+                "type": "button",
+                "backgroundColor": "#102010",
+                "borderStyle": "solid",
+                "borderColor": "#D3D3D3",
+                "borderWidth": 1,
+                "text": "Delete",
+                "clickedText": "Delete",
+                "actions": {
+                    "click": { "file": "ui/entries-panel/entries-panel.js", "function": "deleteEntry" }
+                }
+            },
+            "lock-vault": {
+                "type": "button",
+                "backgroundColor": "#102010",
+                "borderStyle": "solid",
+                "borderColor": "#D3D3D3",
+                "borderWidth": 1,
+                "maxWidth": 150,
+                "text": "Lock Vault",
+                "clickedText": "Lock Vault",
+                "actions": {
+                    "click": { "file": "ui/entries-panel/entries-panel.js", "function": "lockVault" }
+                }
+            }
+        }
+    }
+}

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Globalization;
 
 namespace Allwhither.Windows;
 
@@ -90,7 +91,43 @@ internal static class UiDefinition
     {
         GetBackgroundColor(spec);
         GetForegroundColor(spec);
+        GetBorderColor(spec);
+        if (spec.TryGetProperty("borderStyle", out JsonElement borderStyle) &&
+            (borderStyle.ValueKind != JsonValueKind.String ||
+             borderStyle.GetString() is not ("solid" or "dashed" or "dotted" or "none")))
+        {
+            throw new InvalidDataException(
+                "borderStyle must be solid, dashed, dotted, or none.");
+        }
+        if (spec.TryGetProperty("borderWidth", out _))
+        {
+            GetNonNegativeInt(spec, "borderWidth");
+        }
+        if (spec.TryGetProperty("fontSize", out _))
+        {
+            GetPositiveInt(spec, "fontSize");
+        }
+        if (spec.TryGetProperty("maxWidth", out _))
+        {
+            GetPositiveInt(spec, "maxWidth");
+        }
+        if (spec.TryGetProperty("media", out JsonElement controlMedia))
+        {
+            ValidateControlMedia(controlMedia);
+        }
         ValidateActions(spec);
+        foreach (string dimension in new[] { "width", "height" })
+        {
+            if (spec.TryGetProperty(dimension, out _))
+            {
+                GetDimension(spec, dimension);
+            }
+        }
+        if (spec.TryGetProperty("center", out JsonElement center) &&
+            center.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+        {
+            throw new InvalidDataException("center must be a boolean.");
+        }
         switch (GetString(spec, "type"))
         {
             case "label":
@@ -113,6 +150,11 @@ internal static class UiDefinition
                     placeholder.ValueKind != JsonValueKind.String)
                 {
                     throw new InvalidDataException("textField.placeholder must be a string.");
+                }
+                if (spec.TryGetProperty("autocomplete", out JsonElement autocomplete) &&
+                    autocomplete.ValueKind != JsonValueKind.String)
+                {
+                    throw new InvalidDataException("textField.autocomplete must be a string.");
                 }
                 break;
             case "textArea":
@@ -137,14 +179,13 @@ internal static class UiDefinition
             }
             case "scrollPanel":
                 GetString(spec, "label");
-                GetPositiveInt(spec, "height");
+                GetDimension(spec, "height");
                 foreach (JsonElement child in GetArray(spec, "children").EnumerateArray())
                 {
                     GetControlId(child);
                 }
                 break;
             case "panel":
-                GetString(spec, "label");
                 foreach (JsonElement child in GetArray(spec, "children").EnumerateArray())
                 {
                     GetControlId(child);
@@ -223,6 +264,53 @@ internal static class UiDefinition
         return type;
     }
 
+    private static void ValidateControlMedia(JsonElement media)
+    {
+        if (media.ValueKind != JsonValueKind.Array)
+        {
+            throw new InvalidDataException("control.media must be an array.");
+        }
+        foreach (JsonElement rule in media.EnumerateArray())
+        {
+            if (rule.ValueKind != JsonValueKind.Object)
+            {
+                throw new InvalidDataException("control.media rules must be objects.");
+            }
+            bool hasMin = rule.TryGetProperty("minWidth", out _);
+            bool hasMax = rule.TryGetProperty("maxWidth", out _);
+            if (!hasMin && !hasMax)
+            {
+                throw new InvalidDataException("control.media rules need minWidth or maxWidth.");
+            }
+            if ((hasMin && GetInt(rule, "minWidth") < 0) ||
+                (hasMax && GetInt(rule, "maxWidth") < 0))
+            {
+                throw new InvalidDataException("control.media widths must not be negative.");
+            }
+            if (!rule.TryGetProperty("visible", out JsonElement visible) ||
+                visible.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+            {
+                throw new InvalidDataException("control.media visible must be a boolean.");
+            }
+        }
+    }
+
+    internal static bool ResolveControlVisibility(JsonElement media, int width)
+    {
+        bool visible = true;
+        foreach (JsonElement rule in media.EnumerateArray())
+        {
+            if ((!rule.TryGetProperty("minWidth", out JsonElement min) ||
+                 width >= min.GetInt32()) &&
+                (!rule.TryGetProperty("maxWidth", out JsonElement max) ||
+                 width <= max.GetInt32()))
+            {
+                visible = rule.GetProperty("visible").GetBoolean();
+            }
+        }
+        return visible;
+    }
+
     private static void ValidateActions(JsonElement spec)
     {
         if (!spec.TryGetProperty("actions", out JsonElement actions))
@@ -238,7 +326,8 @@ internal static class UiDefinition
         {
             "button" => ["click"],
             "comboBox" or "checkbox" or "radioGroup" or "list" => ["change"],
-            "textField" or "textArea" or "slider" => ["input"],
+            "textField" => ["input", "enter"],
+            "textArea" or "slider" => ["input"],
             _ => []
         };
         foreach (JsonProperty action in actions.EnumerateObject())
@@ -290,6 +379,9 @@ internal static class UiDefinition
 
     internal static Color? GetForegroundColor(JsonElement spec) =>
         OptionalColor(spec, "foregroundColor", "control.foregroundColor");
+
+    internal static Color? GetBorderColor(JsonElement spec) =>
+        OptionalColor(spec, "borderColor", "control.borderColor");
 
     internal static ThemeColors GetTheme(JsonElement ui)
     {
@@ -441,6 +533,51 @@ internal static class UiDefinition
             throw new InvalidDataException($"{name} must be positive.");
         }
         return value;
+    }
+
+    internal static int GetNonNegativeInt(JsonElement parent, string name)
+    {
+        int value = GetInt(parent, name);
+        if (value < 0)
+        {
+            throw new InvalidDataException($"{name} must be non-negative.");
+        }
+        return value;
+    }
+
+    internal static ControlDimension GetDimension(JsonElement parent, string name)
+    {
+        if (!parent.TryGetProperty(name, out JsonElement value))
+        {
+            throw new InvalidDataException($"{name} must be a positive pixel value or percentage.");
+        }
+        if (value.ValueKind == JsonValueKind.Number &&
+            value.TryGetInt32(out int pixels) && pixels > 0)
+        {
+            return new ControlDimension(pixels, null);
+        }
+        if (value.ValueKind == JsonValueKind.String)
+        {
+            string text = value.GetString()!;
+            if (System.Text.RegularExpressions.Regex.IsMatch(
+                    text, @"^\d+(?:\.\d+)?%$") &&
+                double.TryParse(text[..^1], NumberStyles.AllowDecimalPoint,
+                    CultureInfo.InvariantCulture, out double percent) &&
+                percent > 0 && percent <= 100)
+            {
+                return new ControlDimension(0, percent);
+            }
+        }
+        throw new InvalidDataException(
+            $"{name} must be a positive pixel value or a percentage greater than 0% and at most 100%.");
+    }
+
+    internal readonly record struct ControlDimension(int Pixels, double? Percent)
+    {
+        internal int Resolve(int available) =>
+            Percent is double percent
+                ? (int)Math.Round(available * percent / 100, MidpointRounding.AwayFromZero)
+                : Pixels;
     }
 
     internal static bool GetBoolean(JsonElement parent, string name)

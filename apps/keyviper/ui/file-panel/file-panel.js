@@ -33,93 +33,16 @@ function chooseVault(dom) {
     vaultFile.entries = [];
     vaultFile.index = -1;
     vaultFile.dirty = false;
-    dom.setText("chosen-file", "Selected: " + vaultFile.name);
-    dom.setStatus("File selected. Enter its password to open it.");
+    showPasswordPanel(dom, "open");
+    dom.setStatus("Enter the vault password to open this file.");
   }).catch(function (error) {
     dom.setStatus("Could not choose a file: " + error);
   });
 }
 
-function openVault(dom) {
-  if (!vaultFile.ciphertext) {
-    dom.setStatus("Choose a vault file first.");
-    return;
-  }
-  var password = dom.getValue("master-password") || "";
-  if (!password) {
-    dom.setStatus("Enter the vault password.");
-    return;
-  }
-  dom.setStatus("Opening vault...");
-  api.crypto.decrypt(vaultFile.ciphertext, password).then(function (plain) {
-    var entries;
-    try {
-      entries = parseVault(plain);
-    } catch (error) {
-      dom.setStatus(error && error.message ? error.message : String(error));
-      return;
-    }
-    vaultFile.password = password;
-    vaultFile.entries = entries;
-    vaultFile.index = entries.length ? 0 : -1;
-    vaultFile.dirty = false;
-    showEntries(dom);
-    dom.setStatus(entries.length ? "Vault opened." : "Vault opened. It has no entries yet.");
-  }).catch(function () {
-    dom.setStatus("Could not open the vault. The password is incorrect or the file is damaged.");
-  });
-}
-
-function createVault(dom) {
-  var password = dom.getValue("master-password") || "";
-  if (!password) {
-    dom.setStatus("Enter a password for the new vault.");
-    return;
-  }
-  var created = emptyVault();
-  created.password = password;
-  dom.setStatus("Choose where to save the new vault...");
-  api.crypto.encrypt(plaintextFor(created), password).then(function (encrypted) {
-    return api.file.saveAs({
-      title: "Create Key Viper vault",
-      name: "passwords.keyviper",
-      content: encrypted,
-      filters: VAULT_FILTERS
-    }).then(function (result) {
-      return { result: result, encrypted: encrypted };
-    });
-  }).then(function (saved) {
-    if (!saved.result || saved.result.canceled || saved.result.ok === false) {
-      dom.setStatus("Create canceled");
-      return;
-    }
-    vaultFile = created;
-    vaultFile.name = saved.result.name || "passwords.keyviper";
-    vaultFile.path = saved.result.path || null;
-    vaultFile.handle = saved.result.handle || null;
-    vaultFile.ciphertext = saved.encrypted;
-    showEntries(dom);
-    dom.setStatus("Created " + vaultFile.name);
-  }).catch(function (error) {
-    dom.setStatus("Could not create the vault: " + error);
-  });
-}
-
-function refreshEntries(dom) {
-  var titles = vaultFile.entries.map(function (entry) {
-    return entry.title || "Untitled";
-  });
-  if (titles.length === 0) {
-    vaultFile.index = -1;
-    dom.setOptions("entry-list", []);
-    clearEntry(dom);
-    return;
-  }
-  if (vaultFile.index < 0 || vaultFile.index >= titles.length) {
-    vaultFile.index = 0;
-  }
-  dom.setOptions("entry-list", titles, vaultFile.index);
-  showEntry(dom);
+function beginCreateVault(dom) {
+  showPasswordPanel(dom, "create");
+  dom.setStatus("Enter a password for the new vault.");
 }
 
 function showEntry(dom) {
@@ -146,12 +69,7 @@ function commitEntry(dom) {
   if (!entry) {
     return false;
   }
-  var next = {
-    title: dom.getValue("entry-title") || "",
-    username: dom.getValue("entry-username") || "",
-    password: dom.getValue("entry-password") || "",
-    notes: dom.getValue("entry-notes") || ""
-  };
+  var next = entryFromForm(dom);
   if (entry.title === next.title &&
       entry.username === next.username &&
       entry.password === next.password &&
@@ -161,6 +79,15 @@ function commitEntry(dom) {
   vaultFile.entries[vaultFile.index] = next;
   vaultFile.dirty = true;
   return true;
+}
+
+function entryFromForm(dom) {
+  return {
+    title: dom.getValue("entry-title") || "",
+    username: dom.getValue("entry-username") || "",
+    password: dom.getValue("entry-password") || "",
+    notes: dom.getValue("entry-notes") || ""
+  };
 }
 
 function plaintextFor(vault) {

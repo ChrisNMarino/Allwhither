@@ -1,3 +1,5 @@
+using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.Text.Json;
 using System.Windows.Forms;
 
@@ -11,8 +13,13 @@ internal sealed class ControlRenderer
     private readonly UiDom dom;
     private readonly JavaScriptActionRuntime actionRuntime;
     private int width;
+    private int availableHeight;
     private readonly Dictionary<Control, int> widthOffsets = new();
     private readonly Dictionary<Control, JsonElement> groups = new();
+    private readonly Dictionary<Control, ControlSizeSpec> sizes = new();
+    private readonly HashSet<Control> wrappingLabels = new();
+    private readonly Dictionary<Control, int> maxWidths = new();
+    private readonly Dictionary<Control, JsonElement> responsiveVisibility = new();
     private readonly Color? themeBackground;
     private readonly Color? themeForeground;
 
@@ -33,8 +40,74 @@ internal sealed class ControlRenderer
     {
         JsonElement spec = controls.GetProperty(controlId);
         Control control = RenderControlContent(controlId);
+        if (spec.TryGetProperty("margin", out JsonElement margin))
+        {
+            int pixels = UiDefinition.GetNonNegativeInt(spec, "margin");
+            control.Margin = new Padding(pixels);
+        }
+        if (spec.TryGetProperty("padding", out JsonElement padding))
+        {
+            int pixels = UiDefinition.GetNonNegativeInt(spec, "padding");
+            control.Padding = new Padding(pixels);
+        }
+        if (spec.TryGetProperty("maxWidth", out _))
+        {
+            int maxWidth = UiDefinition.GetPositiveInt(spec, "maxWidth");
+            maxWidths[control] = maxWidth;
+            control.MaximumSize = new Size(
+                Math.Max(1, Math.Min(maxWidth, width - control.Margin.Horizontal)), 0);
+        }
+        UiDefinition.ControlDimension? controlWidth =
+            spec.TryGetProperty("width", out _)
+                ? UiDefinition.GetDimension(spec, "width") : null;
+        UiDefinition.ControlDimension? controlHeight =
+            spec.TryGetProperty("height", out _)
+                ? UiDefinition.GetDimension(spec, "height") : null;
+        if (controlWidth is UiDefinition.ControlDimension widthDimension)
+        {
+            control.AutoSize = false;
+            control.Width = widthDimension.Resolve(width);
+        }
+        if (controlHeight is UiDefinition.ControlDimension heightDimension &&
+            (UiDefinition.GetString(spec, "type") != "scrollPanel" ||
+             heightDimension.Percent is not null))
+        {
+            control.AutoSize = false;
+            if (heightDimension.Percent is null || availableHeight > 0)
+            {
+                control.Height = heightDimension.Resolve(availableHeight) +
+                    (UiDefinition.GetString(spec, "type") == "scrollPanel" ? 28 : 0);
+            }
+        }
+        bool center = spec.TryGetProperty("center", out JsonElement centerValue) &&
+            centerValue.GetBoolean();
+        if (controlWidth is not null || controlHeight is not null || center)
+        {
+            sizes[control] = new ControlSizeSpec(
+                controlWidth,
+                UiDefinition.GetString(spec, "type") == "scrollPanel" &&
+                    controlHeight is { Percent: null } ? null : controlHeight,
+                center,
+                control.Margin,
+                UiDefinition.GetString(spec, "type") == "scrollPanel");
+            if (center)
+            {
+                    int extra = Math.Max(0, width - control.Width -
+                        control.Margin.Left - control.Margin.Right) / 2;
+                    control.Margin = new Padding(
+                        control.Margin.Left + extra, control.Margin.Top,
+                        control.Margin.Right + extra, control.Margin.Bottom);
+            }
+        }
         control.Tag = ControlRootTag;
+        if (spec.TryGetProperty("media", out JsonElement media))
+        {
+            responsiveVisibility[control] = media;
+            control.Visible = UiDefinition.ResolveControlVisibility(media, width);
+        }
+        ApplyFontSize(spec, control);
         ApplyColors(spec, control);
+        ApplyBorder(spec, control);
         dom.Register(controlId, control);
         BindActions(controlId, spec, control);
         return control;
@@ -93,6 +166,17 @@ internal sealed class ControlRenderer
                             (_, _) => actionRuntime.Invoke(controlId, "input");
                     }
                     break;
+                case "enter":
+                    Find<TextBox>(root).First().KeyDown += (_, eventArgs) =>
+                    {
+                        if (eventArgs.KeyCode == Keys.Enter)
+                        {
+                            eventArgs.Handled = true;
+                            eventArgs.SuppressKeyPress = true;
+                            actionRuntime.Invoke(controlId, "enter");
+                        }
+                    };
+                    break;
             }
         }
     }
@@ -123,12 +207,17 @@ internal sealed class ControlRenderer
         switch (type)
         {
             case "label":
-                return new Label
+            {
+                var label = new Label
                 {
                     Text = UiDefinition.GetString(spec, "text"),
                     AutoSize = true,
+                    MaximumSize = new Size(Math.Max(1, width), 0),
                     Margin = new Padding(3, 6, 3, 6)
                 };
+                wrappingLabels.Add(label);
+                return label;
+            }
             case "button":
             {
                 string text = UiDefinition.GetString(spec, "text");
@@ -311,22 +400,14 @@ internal sealed class ControlRenderer
             }
             case "panel":
             {
-                string label = UiDefinition.GetString(spec, "label");
                 var panel = new FlowLayoutPanel
                 {
                     AutoSize = true,
                     Width = width,
                     FlowDirection = FlowDirection.TopDown,
                     WrapContents = false,
-                    Margin = new Padding(3, 6, 3, 6)
+                    Margin = Padding.Empty
                 };
-                panel.Controls.Add(new Label
-                {
-                    Text = label,
-                    AutoSize = true,
-                    Font = new Font(SystemFonts.DefaultFont.FontFamily, 12, FontStyle.Bold),
-                    Margin = new Padding(0, 0, 0, 8)
-                });
                 foreach (JsonElement child in UiDefinition.GetArray(spec, "children").EnumerateArray())
                 {
                     panel.Controls.Add(Render(child.GetString()!));
@@ -357,7 +438,10 @@ internal sealed class ControlRenderer
             case "scrollPanel":
             {
                 string label = UiDefinition.GetString(spec, "label");
-                int panelHeight = UiDefinition.GetPositiveInt(spec, "height");
+                UiDefinition.ControlDimension panelHeightSpec =
+                    UiDefinition.GetDimension(spec, "height");
+                int panelHeight = panelHeightSpec.Percent is null
+                    ? panelHeightSpec.Pixels : 0;
                 var group = new GroupBox
                 {
                     Text = label,
@@ -427,33 +511,150 @@ internal sealed class ControlRenderer
 
     // Sizes controls to the available column width and picks each group's
     // direction from its media rules for the current window width.
-    internal void ApplyWidth(Control root, int columnWidth, int windowWidth)
+    internal void ApplyWidth(Control root, int columnWidth, int windowWidth, int windowHeight)
     {
         width = columnWidth;
-        ApplyColumnWidth(root, columnWidth, windowWidth);
+        availableHeight = windowHeight;
+        ApplyColumnWidth(root, columnWidth, windowHeight, windowWidth, windowHeight);
     }
 
-    private void ApplyColumnWidth(Control control, int columnWidth, int windowWidth)
+    private void ApplyColumnWidth(
+        Control control, int columnWidth, int columnHeight, int windowWidth, int windowHeight)
     {
+        ApplyResponsiveVisibility(control, windowWidth);
+        int? maxAllowedWidth = null;
+        if (maxWidths.TryGetValue(control, out int configuredMaxWidth))
+        {
+            maxAllowedWidth = Math.Max(
+                1, Math.Min(configuredMaxWidth, columnWidth - control.Margin.Horizontal));
+        }
+        if (wrappingLabels.Contains(control) && control.AutoSize)
+        {
+            int labelMaxWidth = Math.Max(1, columnWidth - control.Margin.Horizontal);
+            maxAllowedWidth = maxAllowedWidth.HasValue
+                ? Math.Min(maxAllowedWidth.Value, labelMaxWidth)
+                : labelMaxWidth;
+        }
+        if (maxAllowedWidth.HasValue)
+        {
+            control.MaximumSize = new Size(maxAllowedWidth.Value, 0);
+        }
         if (widthOffsets.TryGetValue(control, out int offset))
         {
-            control.Width = columnWidth + offset;
+            control.Width = maxAllowedWidth.HasValue
+                ? Math.Min(columnWidth + offset, maxAllowedWidth.Value)
+                : columnWidth + offset;
         }
-        int childWidth = columnWidth;
+        if (sizes.TryGetValue(control, out ControlSizeSpec? size))
+        {
+            if (size.Width is UiDefinition.ControlDimension controlWidth)
+            {
+                int requestedWidth = controlWidth.Resolve(columnWidth);
+                control.Width = maxAllowedWidth.HasValue
+                    ? Math.Min(requestedWidth, maxAllowedWidth.Value)
+                    : requestedWidth;
+            }
+            if (size.Height is UiDefinition.ControlDimension controlHeight)
+            {
+                int availableHeight = control.Parent?.ClientSize.Height ?? columnHeight;
+                if (availableHeight <= 0) availableHeight = windowHeight;
+                control.Height = controlHeight.Resolve(availableHeight) +
+                    (size.ScrollPanel ? 28 : 0);
+            }
+            if (size.Center)
+            {
+                int left = size.Margin.Left;
+                int right = size.Margin.Right;
+                int extra = Math.Max(0, columnWidth - control.Width - left - right) / 2;
+                control.Margin = new Padding(
+                    left + extra, size.Margin.Top, right + extra, size.Margin.Bottom);
+            }
+        }
+        int childWidth = control.ClientSize.Width > 0
+            ? control.ClientSize.Width
+            : columnWidth;
+        int childHeight = control.ClientSize.Height > 0
+            ? control.ClientSize.Height
+            : columnHeight;
         if (control is FlowLayoutPanel flow && groups.TryGetValue(control, out JsonElement layout))
         {
             bool horizontal = UiDefinition.ResolveLayoutType(layout, windowWidth) == "horizontal";
             flow.FlowDirection = horizontal ? FlowDirection.LeftToRight : FlowDirection.TopDown;
-            if (horizontal && flow.Controls.Count > 0)
+            if (horizontal)
             {
-                childWidth = Math.Max(80, columnWidth / flow.Controls.Count - 6);
+                foreach (Control child in flow.Controls)
+                {
+                    ApplyResponsiveVisibility(child, windowWidth);
+                }
+                Control[] visibleChildren = flow.Controls
+                    .Cast<Control>()
+                    .Where(child => child.Visible)
+                    .ToArray();
+                if (visibleChildren.Length > 0)
+                {
+                    int availableWidth = Math.Max(
+                        1,
+                        childWidth - flow.Padding.Horizontal -
+                            visibleChildren.Sum(child => child.Margin.Horizontal));
+                    Control[] fixedWidthChildren = visibleChildren
+                        .Where(maxWidths.ContainsKey)
+                        .ToArray();
+                    int fixedWidthBudgetPerChild = fixedWidthChildren.Length == 0
+                        ? 0
+                        : availableWidth / fixedWidthChildren.Length;
+                    int fixedWidthTotal = fixedWidthChildren.Sum(
+                        child => Math.Min(maxWidths[child], fixedWidthBudgetPerChild));
+                    int flexibleCount = visibleChildren.Length - fixedWidthChildren.Length;
+                    int flexibleWidth = flexibleCount == 0
+                        ? 0
+                        : fixedWidthChildren.Length == 0
+                            ? Math.Max(80, childWidth / visibleChildren.Length - 6)
+                            : Math.Max(
+                                1, (availableWidth - fixedWidthTotal) / flexibleCount);
+                    foreach (Control child in flow.Controls)
+                    {
+                        int childColumnWidth = childWidth;
+                        if (child.Visible && maxWidths.TryGetValue(child, out int maxWidth))
+                        {
+                            childColumnWidth = Math.Min(maxWidth, fixedWidthBudgetPerChild) +
+                                child.Margin.Horizontal;
+                        }
+                        else if (child.Visible && fixedWidthChildren.Length > 0)
+                        {
+                            childColumnWidth = flexibleWidth + child.Margin.Horizontal;
+                        }
+                        else if (child.Visible)
+                        {
+                            childColumnWidth = flexibleWidth +
+                                (fixedWidthChildren.Length > 0 ? child.Margin.Horizontal : 0);
+                        }
+                        ApplyColumnWidth(
+                            child, childColumnWidth, childHeight, windowWidth, windowHeight);
+                    }
+                    return;
+                }
             }
         }
         foreach (Control child in control.Controls)
         {
-            ApplyColumnWidth(child, childWidth, windowWidth);
+            ApplyColumnWidth(child, childWidth, childHeight, windowWidth, windowHeight);
         }
     }
+
+    private void ApplyResponsiveVisibility(Control control, int windowWidth)
+    {
+        if (responsiveVisibility.TryGetValue(control, out JsonElement media))
+        {
+            control.Visible = UiDefinition.ResolveControlVisibility(media, windowWidth);
+        }
+    }
+
+    private sealed record ControlSizeSpec(
+        UiDefinition.ControlDimension? Width,
+        UiDefinition.ControlDimension? Height,
+        bool Center,
+        Padding Margin,
+        bool ScrollPanel);
 
     private void ApplyColors(JsonElement spec, Control control)
     {
@@ -471,6 +672,84 @@ internal sealed class ControlRenderer
         {
             ApplyForegroundColor(control, foreground.Value);
         }
+    }
+
+    private static void ApplyFontSize(JsonElement spec, Control control)
+    {
+        if (!spec.TryGetProperty("fontSize", out _))
+        {
+            return;
+        }
+        float sizeInPoints = UiDefinition.GetPositiveInt(spec, "fontSize") * 72f / 96f;
+        ApplyFontSize(control, sizeInPoints);
+    }
+
+    private static void ApplyFontSize(Control control, float sizeInPoints)
+    {
+        control.Font = new Font(
+            control.Font.FontFamily,
+            sizeInPoints,
+            control.Font.Style,
+            GraphicsUnit.Point);
+        foreach (Control child in control.Controls)
+        {
+            if (!ReferenceEquals(child.Tag, ControlRootTag))
+            {
+                ApplyFontSize(child, sizeInPoints);
+            }
+        }
+    }
+
+    private static void ApplyBorder(JsonElement spec, Control control)
+    {
+        if (!spec.TryGetProperty("borderStyle", out JsonElement styleValue) &&
+            !spec.TryGetProperty("borderColor", out _) &&
+            !spec.TryGetProperty("borderWidth", out _))
+        {
+            return;
+        }
+
+        string style = styleValue.ValueKind == JsonValueKind.String
+            ? styleValue.GetString()!
+            : "solid";
+        if (style == "none")
+        {
+            return;
+        }
+        int width = spec.TryGetProperty("borderWidth", out _)
+            ? UiDefinition.GetNonNegativeInt(spec, "borderWidth")
+            : 1;
+        if (width == 0)
+        {
+            return;
+        }
+        Color color = UiDefinition.GetBorderColor(spec) ?? Color.Black;
+        DashStyle dashStyle = style switch
+        {
+            "dashed" => DashStyle.Dash,
+            "dotted" => DashStyle.Dot,
+            _ => DashStyle.Solid
+        };
+        if (control is Button button && dashStyle == DashStyle.Solid)
+        {
+            button.FlatStyle = FlatStyle.Flat;
+            button.FlatAppearance.BorderColor = color;
+            button.FlatAppearance.BorderSize = width;
+            return;
+        }
+
+        control.Paint += (_, eventArgs) =>
+        {
+            Rectangle bounds = control.ClientRectangle;
+            if (bounds.Width <= width || bounds.Height <= width)
+            {
+                return;
+            }
+            using var pen = new Pen(color, width) { DashStyle = dashStyle };
+            int inset = width / 2;
+            eventArgs.Graphics.DrawRectangle(
+                pen, inset, inset, bounds.Width - width, bounds.Height - width);
+        };
     }
 
     private static void ApplyBackgroundColor(Control control, Color color)

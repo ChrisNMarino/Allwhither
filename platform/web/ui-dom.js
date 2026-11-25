@@ -29,8 +29,12 @@ export class UiDom {
     if (definition.type === "radioGroup") {
       return element.querySelector("legend").textContent;
     }
-    if (definition.type === "scrollPanel" || definition.type === "panel") {
+    if (definition.type === "scrollPanel") {
       return element.querySelector("h2").textContent;
+    }
+    if (definition.type === "panel") {
+      const titleId = this.panelTitleId(id);
+      return titleId ? this.getText(titleId) : "";
     }
     return element.querySelector(":scope > span")?.textContent ?? definition.label ?? "";
   }
@@ -50,8 +54,16 @@ export class UiDom {
       element.querySelector("legend").textContent = String(text);
       return;
     }
-    if (type === "scrollPanel" || type === "panel") {
+    if (type === "scrollPanel") {
       element.querySelector("h2").textContent = String(text);
+      return;
+    }
+    if (type === "panel") {
+      const titleId = this.panelTitleId(id);
+      if (!titleId) {
+        throw new Error(`Panel '${id}' has no leading label control.`);
+      }
+      this.setText(titleId, text);
       return;
     }
     const caption = element.querySelector(":scope > span");
@@ -98,6 +110,13 @@ export class UiDom {
       const output = element.querySelector("output");
       if (output) output.value = input.value;
     }
+  }
+
+  setVisible(id, visible) {
+    if (typeof visible !== "boolean") {
+      throw new Error("visible must be a boolean.");
+    }
+    this.element(id).hidden = !visible;
   }
 
   getChecked(id) {
@@ -196,7 +215,7 @@ export class UiDom {
         return element;
       }));
       if (definition.type === "list") {
-        select.size = Math.min(Math.max(options.length, 1), 4);
+        select.size = Math.max(options.length, 2);
       }
       select.selectedIndex = index;
     } finally {
@@ -224,6 +243,14 @@ export class UiDom {
       }
     }
     this.elements.delete(id);
+  }
+
+  panelTitleId(id) {
+    const firstChildId = this.definition(id).children?.[0];
+    return typeof firstChildId === "string" &&
+      this.definition(firstChildId).type === "label"
+      ? firstChildId
+      : null;
   }
 
   definition(id) {

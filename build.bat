@@ -55,7 +55,7 @@ for %%F in ("%ROOT_DIR%platform\web\*") do (
         copy /y "%%F" "%WEB_DIR%\" >nul || goto failed
     )
 )
-python tools\embed_resources.py --platform json --project-dir "projects\%PROJECT%" --output "%WEB_DIR%\payload.json"
+python tools\embed_resources.py --platform json --project-dir "apps\%PROJECT%" --output "%WEB_DIR%\payload.json"
 if errorlevel 1 goto failed
 if defined PORT (set "WEB_PORT=%PORT%") else set "WEB_PORT=8080"
 echo Built %WEB_DIR%
@@ -94,7 +94,7 @@ exit /b 0
 
 :show_usage
 echo Usage: build.bat [linux^|windows^|android^|web] [project]
-echo A project is a directory under projects\ with an entry file named ^<project^>.json.
+echo A project is a directory under apps\ with an entry file named ^<project^>.json.
 echo Available projects:
 call :list_projects
 echo If either argument is omitted, the script prompts for it.
@@ -103,7 +103,7 @@ echo The web option then serves that directory.
 exit /b 0
 
 :list_projects
-for /d %%D in ("%ROOT_DIR%projects\*") do (
+for /d %%D in ("%ROOT_DIR%apps\*") do (
     if exist "%%D\%%~nxD.json" echo   %%~nxD
 )
 exit /b 0
@@ -118,5 +118,5 @@ exit /b 0
 if not defined PROJECT exit /b 1
 for /f "delims=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-" %%A in ("%PROJECT%") do exit /b 1
 echo.%PROJECT:~0,1%| findstr /r "[A-Za-z0-9]" >nul || exit /b 1
-if not exist "%ROOT_DIR%projects\%PROJECT%\%PROJECT%.json" exit /b 1
+if not exist "%ROOT_DIR%apps\%PROJECT%\%PROJECT%.json" exit /b 1
 exit /b 0

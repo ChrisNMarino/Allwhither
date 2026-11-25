@@ -1,5 +1,5 @@
 import { effectiveColors } from "./colors.js";
-import { resolveLayoutType } from "./ui-config.js";
+import { resolveControlVisibility, resolveLayoutType } from "./ui-config.js";
 
 function labeledControl(label, control) {
   const wrapper = document.createElement("label");
@@ -31,8 +31,41 @@ export function renderControl(controlId, controls, status, actionRuntime, dom, t
   const element = renderControlContent(
     controlId, controls, status, actionRuntime, dom, theme,
   );
+  if (control.margin !== undefined) {
+    element.style.margin = `${control.margin}px`;
+  }
+  if (control.padding !== undefined) {
+    element.style.padding = `${control.padding}px`;
+  }
+  if (control.fontSize !== undefined) {
+    element.style.fontSize = `${control.fontSize}px`;
+  }
+  if (control.borderStyle !== undefined || control.borderColor !== undefined ||
+      control.borderWidth !== undefined) {
+    element.style.borderStyle = control.borderStyle ?? "solid";
+    element.style.borderColor = control.borderColor ?? "#000000";
+    element.style.borderWidth = `${control.borderWidth ?? 1}px`;
+  }
+  if (control.width !== undefined) {
+    element.style.width = dimensionCss(control.width);
+    element.style.flex = "none";
+  }
+  if (control.maxWidth !== undefined) {
+    element.style.maxWidth = `${control.maxWidth}px`;
+  }
+  if (control.height !== undefined && control.type !== "scrollPanel") {
+    element.style.height = dimensionCss(control.height);
+  }
+  if (control.center) {
+    element.dataset.centerControl = "true";
+    element.style.flex = "none";
+    element.style.alignSelf = "center";
+  }
   element.dataset.allwhitherControl = "true";
   dom.register(controlId, element);
+  if (control.media !== undefined) {
+    trackResponsiveVisibility(element, control.media);
+  }
   const colors = effectiveColors(control, theme);
   if (colors.background || colors.foreground) {
     if (colors.foreground) {
@@ -44,9 +77,18 @@ export function renderControl(controlId, controls, status, actionRuntime, dom, t
   for (const [eventType, action] of Object.entries(control.actions ?? {})) {
     const targets = actionTargets(control.type, element);
     for (const target of targets[eventType] ?? []) {
-      target.addEventListener(eventType, () => {
-        actionRuntime.invoke(controlId, eventType);
-      });
+      if (eventType === "enter") {
+        target.addEventListener("keydown", (event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            actionRuntime.invoke(controlId, eventType);
+          }
+        });
+      } else {
+        target.addEventListener(eventType, () => {
+          actionRuntime.invoke(controlId, eventType);
+        });
+      }
     }
     if (!targets[eventType]?.length && action) {
       throw new Error(`No '${eventType}' event target exists for control '${controlId}'.`);
@@ -59,7 +101,7 @@ function actionTargets(type, element) {
   const selectors = {
     button: { click: "button" },
     comboBox: { change: "select" },
-    textField: { input: "input" },
+    textField: { input: "input", enter: "input" },
     textArea: { input: "textarea" },
     checkbox: { change: "input[type=checkbox]" },
     radioGroup: { change: "input[type=radio]" },
@@ -113,6 +155,9 @@ function renderControlContent(controlId, controls, status, actionRuntime, dom, t
       input.type = control.password ? "password" : "text";
       input.value = control.value;
       input.placeholder = control.placeholder ?? "";
+      if (control.autocomplete !== undefined) {
+        input.autocomplete = control.autocomplete;
+      }
       input.addEventListener("input", () => {
         status.textContent = input.type === "password"
           ? `${control.label}: hidden`
@@ -175,13 +220,14 @@ function renderControlContent(controlId, controls, status, actionRuntime, dom, t
         value.value = input.value;
         status.textContent = `${control.label}: ${input.value}`;
       });
-      const field = labeledControl(control.label, input);
-      field.append(value);
-      return field;
+      const slider = document.createElement("span");
+      slider.className = "slider-control";
+      slider.append(input, value);
+      return labeledControl(control.label, slider);
     }
     case "list": {
       const select = document.createElement("select");
-      select.size = Math.min(control.options.length, 4);
+      select.size = Math.max(control.options.length, 2);
       control.options.forEach((option) => {
         const element = document.createElement("option");
         element.textContent = option;
@@ -196,8 +242,6 @@ function renderControlContent(controlId, controls, status, actionRuntime, dom, t
     case "panel": {
       const panel = document.createElement("section");
       panel.className = "view-panel";
-      const heading = document.createElement("h2");
-      heading.textContent = control.label;
       const children = document.createElement("div");
       children.className = "control-list";
       control.children.forEach((childId) => {
@@ -205,7 +249,7 @@ function renderControlContent(controlId, controls, status, actionRuntime, dom, t
           childId, controls, status, actionRuntime, dom, theme,
         ));
       });
-      panel.append(heading, children);
+      panel.append(children);
       return panel;
     }
     case "group": {
@@ -222,7 +266,7 @@ function renderControlContent(controlId, controls, status, actionRuntime, dom, t
     case "scrollPanel": {
       const panel = document.createElement("section");
       panel.className = "scroll-panel";
-      panel.style.height = `${control.height}px`;
+      panel.style.height = dimensionCss(control.height);
       const heading = document.createElement("h2");
       heading.textContent = control.label;
       const children = document.createElement("div");
@@ -240,19 +284,40 @@ function renderControlContent(controlId, controls, status, actionRuntime, dom, t
   }
 }
 
+function dimensionCss(value) {
+  return typeof value === "number" ? `${value}px` : value;
+}
+
 let nextRadioId = 0;
 
 const responsiveElements = [];
+const responsiveControls = [];
 
 export function trackResponsiveLayout(element, layout) {
   responsiveElements.push({ element, layout });
   applyResponsiveLayout({ element, layout }, window.innerWidth);
 }
 
+function trackResponsiveVisibility(element, media) {
+  const responsiveControl = { element, media };
+  responsiveControls.push(responsiveControl);
+  applyResponsiveVisibility(responsiveControl, window.innerWidth);
+}
+
+function applyResponsiveVisibility({ element, media }, width) {
+  element.style.display = resolveControlVisibility(media, width) ? "" : "none";
+}
+
 function applyResponsiveLayout({ element, layout }, width) {
   const type = resolveLayoutType(layout, width);
   element.classList.toggle("horizontal", type === "horizontal");
   element.classList.toggle("centered", type === "center");
+  for (const child of element.children) {
+    if (child.dataset.centerControl !== "true") continue;
+    child.style.alignSelf = type === "horizontal" ? "" : "center";
+    child.style.marginInlineStart = type === "horizontal" ? "auto" : "";
+    child.style.marginInlineEnd = type === "horizontal" ? "auto" : "";
+  }
 }
 
 export function updateResponsiveLayouts() {
@@ -264,6 +329,14 @@ export function updateResponsiveLayouts() {
     }
     responsiveElements[i].seen = responsiveElements[i].element.isConnected;
     applyResponsiveLayout(responsiveElements[i], width);
+  }
+  for (let i = responsiveControls.length - 1; i >= 0; i--) {
+    if (!responsiveControls[i].element.isConnected && responsiveControls[i].seen) {
+      responsiveControls.splice(i, 1);
+      continue;
+    }
+    responsiveControls[i].seen = responsiveControls[i].element.isConnected;
+    applyResponsiveVisibility(responsiveControls[i], width);
   }
 }
 

@@ -5,8 +5,8 @@ describe an application and each platform builds its UI with native controls.
 
 ## Shared UI
 
-Each project lives under `projects/` and uses
-`projects/<project>/<project>.json` as its entry point. Platform implementations
+Each project lives under `apps/` and uses
+`apps/<project>/<project>.json` as its entry point. Platform implementations
 live under `platform/`. The `example` project
 includes `ui.json`. Included objects are merged in order, including nested
 objects such as `ui.controls`. When both files set the same property, the
@@ -23,7 +23,13 @@ wins. Rules only switch between `vertical` and `horizontal`, and `center`
 layouts do not support `media`. The `example` project switches to two columns
 at 720 wide. `window.width` and `window.height` set the Linux and Windows
 window size. Android and web fill the screen or browser window. Set
-`window.fullscreen` to `true` for a fullscreen window.
+`window.fullscreen` to `true` for a fullscreen window. `window.title` sets the
+native window title or browser tab title; it is not rendered as an in-app heading.
+Controls can also use a `media` array with the same width bounds and a
+`visible` boolean to show or hide them responsively. The last matching rule
+wins; controls are visible when no rule matches.
+The window has no default padding around its children; set a control's `margin`
+to keep it inset from the window edge.
 Supported controls are buttons, labels, combo boxes, text fields, checkboxes,
 radio groups, sliders, selectable lists, and scrollable panels. Control values
 and menu selections update a shared status message.
@@ -32,6 +38,7 @@ The window's `layout.children` lists root IDs in display order, and
 `scrollPanel.children` lists nested control IDs. The `menus` collection is
 rendered as the platform's menu affordance.
 Any control may specify optional `backgroundColor` and `foregroundColor` values in `#RRGGBB` format. `window.backgroundColor` and `window.foregroundColor` color the window, title, menus, and status. An optional `ui.theme` object sets the default `backgroundColor` and `foregroundColor` for controls that do not set their own. A color on a control overrides the theme. When a background is set and no foreground is set, the framework uses black or white text, whichever has higher contrast on that background.
+Any control may specify `borderStyle` (`solid`, `dashed`, `dotted`, or `none`), `borderColor` (`#RRGGBB`), and `borderWidth` (a non-negative integer). Setting any border field enables a border with solid style, 1-unit width, and black color by default; `none` disables it.
 Each menu has `label` and `items`; each item has `text` and `message`, which is
 shown in the status area when selected. The control fields are:
 
@@ -40,13 +47,22 @@ shown in the status area when selected. The control fields are:
 | `label` | `text` |
 | `button` | `text`, `clickedText` |
 | `comboBox`, `radioGroup`, `list` | `label`, `options`, `selectedIndex` |
-| `textField` | `label`, `value`, optional `placeholder`, optional `password`. A password field shows `hidden` in the status area instead of the typed text |
+| `textField` | `label`, `value`, optional `placeholder`, optional `password`, optional `autocomplete` (passed to the browser on web). A password field shows `hidden` in the status area instead of the typed text |
 | `textArea` | `label`, `value` |
 | `checkbox` | `label`, `checked` |
 | `slider` | `label`, `min`, `max`, `value` |
 | `scrollPanel` | `label`, `height`, `children` (control IDs) |
-| `panel` | `label`, `children` (control IDs). A panel is a page. Panels may be left out of `window.layout.children` and mounted later |
+| `panel` | `children` (control IDs). A panel is a page. Add a `label` control first to show a heading. Panels may be left out of `window.layout.children` and mounted later |
 | `group` | `children` (control IDs), optional `layout` (`type` `vertical` or `horizontal`, optional `media`; defaults to vertical). An unlabeled container for arranging controls |
+
+Any control may set `center` to `true` to center it horizontally in its parent.
+Optional `width` and `height` accept positive integer layout units or percentage
+strings greater than 0% and up to 100%, measured against the parent’s available
+size. Set `fontSize` to a positive integer to set the control text size in pixels.
+Set `maxWidth` to a positive integer in layout units (pixels on web, Linux and
+Windows; dp on Android) to cap a control's width; it shrinks further when its
+parent is narrower.
+For `scrollPanel`, `height` continues to size the scrollable viewport.
 
 Controls can define JavaScript handlers by event. Script paths are relative to
 the application entry file's directory (the project directory here):
@@ -79,8 +95,9 @@ removes that panel and its children. `dom.setOptions(id, options, selectedIndex)
 replaces the options of a list or combo box. `options` is an array of non-empty
 strings and may be empty. `selectedIndex` is optional; it defaults to `0`, or to
 no selection when the list is empty. `dom.getSelectedIndex(id)` returns the
-selected list or combo box index, or `-1` when nothing is selected. `api` is the
-host object for native code. `api.platform()` returns `linux`, `windows`,
+selected list or combo box index, or `-1` when nothing is selected.
+`dom.setVisible(id, visible)` changes whether a rendered control is shown.
+`api` is the host object for native code. `api.platform()` returns `linux`, `windows`,
 `android`, or `web`. `api.http` sends requests with `get`, `post`, `put`,
 `patch`, `delete`, `head`, `options`, and `request(method, url, options)`. Each
 call returns a thenable. The options object is optional and accepts `headers`,
@@ -102,6 +119,7 @@ encryption with PBKDF2-HMAC-SHA256 key derivation across all platforms. The even
 `type`, `targetId`, `text`, `value`, and `checked`. Supported events are
 `click` on buttons, `change` on combo boxes, checkboxes, radio groups, and
 lists, and `input` on text fields, text areas, and sliders.
+Text fields also support the `enter` event when the user presses Enter.
 
 ## Projects
 
@@ -112,17 +130,18 @@ lists, and `input` on text fields, text areas, and sliders.
 - **Web:** HTML, CSS, and JavaScript. The build writes the project files into
   the web output as an obfuscated payload, which the page decodes in memory.
 
-`projects/example/` contains the interactive controls demo.
-`projects/helloworld/` contains a fullscreen, centered Hello World app.
-`projects/keyviper/` contains Key Viper, a password manager. Its first panel
+`apps/example/` contains the interactive controls demo.
+`apps/helloworld/` contains a fullscreen, centered Hello World app.
+`apps/keyviper/` contains Key Viper, a password manager. Its first panel
 chooses or creates an encrypted vault file on the local file system. The vault
 opens only with the correct password. After it opens, that panel is removed and
 the entries panel lists the saved records.
+Adding, editing, or deleting an entry saves the vault automatically.
 
 ## Run
 
-A project is a directory under `projects/` whose entry file is
-`projects/<project>/<project>.json`. Choose the platform and project from the
+A project is a directory under `apps/` whose entry file is
+`apps/<project>/<project>.json`. Choose the platform and project from the
 repository root. Nothing under `platform/` needs to change.
 
 ```sh

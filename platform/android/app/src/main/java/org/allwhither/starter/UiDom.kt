@@ -117,6 +117,10 @@ class UiDom(
         }
     }
 
+    fun setVisible(id: String, visible: Boolean) {
+        element(id).visibility = if (visible) View.VISIBLE else View.GONE
+    }
+
     fun getChecked(id: String): Boolean {
         if (definition(id).getString("type") != "checkbox") {
             throw IllegalArgumentException("Control '$id' does not expose a checked state.")

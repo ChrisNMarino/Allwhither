@@ -33,6 +33,7 @@ struct _ActionRuntime {
                            const JSValueRef[], JSValueRef *)
 DOM_CALLBACK(dom_get_text);
 DOM_CALLBACK(dom_set_text);
+DOM_CALLBACK(dom_set_visible);
 DOM_CALLBACK(dom_get_value);
 DOM_CALLBACK(dom_set_value);
 DOM_CALLBACK(dom_get_checked);
@@ -73,6 +74,7 @@ static JSStaticFunction api_functions[] = {
 static JSStaticFunction dom_functions[] = {
     { "getText", dom_get_text, kJSPropertyAttributeReadOnly | kJSPropertyAttributeDontDelete },
     { "setText", dom_set_text, kJSPropertyAttributeReadOnly | kJSPropertyAttributeDontDelete },
+    { "setVisible", dom_set_visible, kJSPropertyAttributeReadOnly | kJSPropertyAttributeDontDelete },
     { "getValue", dom_get_value, kJSPropertyAttributeReadOnly | kJSPropertyAttributeDontDelete },
     { "setValue", dom_set_value, kJSPropertyAttributeReadOnly | kJSPropertyAttributeDontDelete },
     { "getChecked", dom_get_checked, kJSPropertyAttributeReadOnly | kJSPropertyAttributeDontDelete },
@@ -366,6 +368,34 @@ dom_set_text(JSContextRef context,
     set_text(runtime, id, text);
     g_free(id);
     g_free(text);
+    return JSValueMakeUndefined(context);
+}
+
+static JSValueRef
+dom_set_visible(JSContextRef context,
+                JSObjectRef function,
+                JSObjectRef this_object,
+                size_t count,
+                const JSValueRef arguments[],
+                JSValueRef *exception)
+{
+    (void) function;
+    if (count < 2 || !JSValueIsBoolean(context, arguments[1])) {
+        set_exception(context, exception, "setVisible requires a control id and boolean state.");
+        return JSValueMakeUndefined(context);
+    }
+    ActionRuntime *runtime = JSObjectGetPrivate(this_object);
+    char *id = js_string(context, arguments[0]);
+    GtkWidget *widget = get_element(runtime, id);
+    if (widget == NULL) {
+        char *message = g_strdup_printf("Unknown or unrendered control id: %s", id);
+        set_exception(context, exception, message);
+        g_free(message);
+        g_free(id);
+        return JSValueMakeUndefined(context);
+    }
+    gtk_widget_set_visible(widget, JSValueToBoolean(context, arguments[1]));
+    g_free(id);
     return JSValueMakeUndefined(context);
 }
 
@@ -799,8 +829,19 @@ dom_remove_panel(JSContextRef context,
         g_free(id);
         return JSValueMakeUndefined(context);
     }
+    GtkWidget *container_child = widget;
+    while (gtk_widget_get_parent(container_child) != runtime->container) {
+        container_child = gtk_widget_get_parent(container_child);
+        if (container_child == NULL) {
+            char *message = g_strdup_printf("Panel '%s' is not attached to the window.", id);
+            set_exception(context, exception, message);
+            g_free(message);
+            g_free(id);
+            return JSValueMakeUndefined(context);
+        }
+    }
     unregister_tree(runtime, id);
-    gtk_box_remove(GTK_BOX(runtime->container), widget);
+    gtk_box_remove(GTK_BOX(runtime->container), container_child);
     g_free(id);
     return JSValueMakeUndefined(context);
 }

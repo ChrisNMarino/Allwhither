@@ -1,0 +1,67 @@
+{
+    "ui": {
+        "controls": {
+            "file-panel": {
+                "type": "panel",
+                "backgroundColor": "#505050",
+                "center": true,
+                "margin": 30,
+                "maxWidth": 500,
+                "padding": 20,
+                "borderStyle": "solid",
+                "borderColor": "#D3D3D3",
+                "borderWidth": 1,
+                "children": [
+                    "file-panel-title",
+                    "intro",
+                    "file-actions"
+                ]
+            },
+            "file-panel-title": {
+                "type": "label",
+                "fontSize": 30,
+                "text": "Open a vault"
+            },
+            "intro": {
+                "type": "label",
+                "margin": 5,
+                "fontSize": 20,
+                "text": "Key Viper keeps passwords in an encrypted file you choose. The file opens only with the correct password."
+            },
+            "choose-file": {
+                "type": "button",
+                "backgroundColor": "#102010",
+                "borderStyle": "solid",
+                "borderColor": "#D3D3D3",
+                "borderWidth": 1,
+                "text": "Choose file",
+                "clickedText": "Choose file",
+                "actions": {
+                    "click": { "file": "ui/file-panel/file-panel.js", "function": "chooseVault" }
+                }
+            },
+            "file-actions": {
+                "type": "group",
+                "center": true,
+                "padding": 20,
+                "layout": { "type": "horizontal" },
+                "children": [
+                    "choose-file",
+                    "create-vault"
+                ]
+            },
+            "create-vault": {
+                "type": "button",
+                "backgroundColor": "#102010",
+                "borderStyle": "solid",
+                "borderColor": "#D3D3D3",
+                "borderWidth": 1,
+                "text": "Create new file",
+                "clickedText": "Create new file",
+                "actions": {
+                    "click": { "file": "ui/file-panel/file-panel.js", "function": "beginCreateVault" }
+                }
+            }
+        }
+    }
+}

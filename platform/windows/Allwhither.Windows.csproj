@@ -14,20 +14,20 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Jint" Version="4.2.0" />
-    <AllwhitherProjectFiles Include="../../projects/$(AllwhitherProject)/**/*.json" />
-    <AllwhitherProjectFiles Include="../../projects/$(AllwhitherProject)/**/*.js" />
+    <AllwhitherProjectFiles Include="../../apps/$(AllwhitherProject)/**/*.json" />
+    <AllwhitherProjectFiles Include="../../apps/$(AllwhitherProject)/**/*.js" />
   </ItemGroup>
   <Target Name="ValidateAllwhitherProject" BeforeTargets="PrepareForBuild">
     <Error Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(AllwhitherProject)', '^[A-Za-z0-9][A-Za-z0-9._-]*$')) != 'True'"
            Text="AllwhitherProject must be a project directory name." />
-    <Error Condition="!Exists('$(MSBuildThisFileDirectory)../../projects/$(AllwhitherProject)/$(AllwhitherProject).json')"
-           Text="Missing projects/$(AllwhitherProject)/$(AllwhitherProject).json." />
+    <Error Condition="!Exists('$(MSBuildThisFileDirectory)../../apps/$(AllwhitherProject)/$(AllwhitherProject).json')"
+           Text="Missing apps/$(AllwhitherProject)/$(AllwhitherProject).json." />
   </Target>
   <Target Name="GenerateEmbeddedResources"
           BeforeTargets="CoreCompile"
           Inputs="$(MSBuildThisFileDirectory)../../tools/embed_resources.py;@(AllwhitherProjectFiles)"
           Outputs="$(IntermediateOutputPath)EmbeddedResourceData.$(AllwhitherProject).g.cs">
-    <Exec Command="$(PythonExe) &quot;$(MSBuildThisFileDirectory)../../tools/embed_resources.py&quot; --platform csharp --project-dir &quot;$(MSBuildThisFileDirectory)../../projects/$(AllwhitherProject)&quot; --output &quot;$(IntermediateOutputPath)EmbeddedResourceData.$(AllwhitherProject).g.cs&quot;" />
+    <Exec Command="$(PythonExe) &quot;$(MSBuildThisFileDirectory)../../tools/embed_resources.py&quot; --platform csharp --project-dir &quot;$(MSBuildThisFileDirectory)../../apps/$(AllwhitherProject)&quot; --output &quot;$(IntermediateOutputPath)EmbeddedResourceData.$(AllwhitherProject).g.cs&quot;" />
   </Target>
   <Target Name="IncludeEmbeddedResources" BeforeTargets="CoreCompile" DependsOnTargets="GenerateEmbeddedResources">
     <ItemGroup>

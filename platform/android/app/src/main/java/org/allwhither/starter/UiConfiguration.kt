@@ -3,10 +3,15 @@ package org.allwhither.starter
 import android.graphics.Color
 import java.io.File
 import kotlin.math.pow
+import kotlin.math.roundToInt
 import org.json.JSONArray
 import org.json.JSONObject
 
 internal data class ThemeColors(val background: Int?, val foreground: Int?)
+internal data class UiDimension(val pixels: Int?, val percent: Double?) {
+    fun resolve(available: Int): Int =
+        percent?.let { (available * it / 100.0).roundToInt() } ?: (pixels ?: 0)
+}
 
 internal class UiConfiguration(
     private val project: String
@@ -164,6 +169,35 @@ internal class UiConfiguration(
         backgroundColor(control)
         foregroundColor(control)
         validateActions(control)
+        if (control.has("margin")) {
+            nonNegativeInt(control, "margin")
+        }
+        if (control.has("padding")) {
+            nonNegativeInt(control, "padding")
+        }
+        if (control.has("fontSize")) {
+            positiveInt(control, "fontSize")
+        }
+        if (control.has("maxWidth")) {
+            positiveInt(control, "maxWidth")
+        }
+        if (control.has("media")) {
+            validateControlMedia(control.optJSONArray("media"), "control.media")
+        }
+        if (control.has("borderStyle")) {
+            val style = optionalString(control, "borderStyle")
+            if (style !in setOf("solid", "dashed", "dotted", "none")) {
+                throw IllegalArgumentException(
+                    "borderStyle must be solid, dashed, dotted, or none."
+                )
+            }
+        }
+        if (control.has("borderWidth")) {
+            nonNegativeInt(control, "borderWidth")
+        }
+        borderColor(control)
+        optionalBoolean(control, "center")
+        listOf("width", "height").forEach { optionalDimension(control, it) }
         when (requiredString(control, "type")) {
             "label" -> requiredString(control, "text")
             "button" -> {
@@ -178,6 +212,7 @@ internal class UiConfiguration(
                 requiredString(control, "label")
                 stringValue(control, "value", allowEmpty = true)
                 if (control.has("placeholder")) optionalString(control, "placeholder")
+                if (control.has("autocomplete")) optionalString(control, "autocomplete")
             }
             "textArea" -> {
                 requiredString(control, "label")
@@ -199,7 +234,7 @@ internal class UiConfiguration(
             }
             "scrollPanel" -> {
                 requiredString(control, "label")
-                positiveInt(control, "height")
+                requiredDimension(control, "height")
                 val children = control.getJSONArray("children")
                 for (index in 0 until children.length()) {
                     requiredControlId(children.get(index))
@@ -215,7 +250,6 @@ internal class UiConfiguration(
                 }
             }
             "panel" -> {
-                requiredString(control, "label")
                 val children = control.getJSONArray("children")
                 for (index in 0 until children.length()) {
                     requiredControlId(children.get(index))
@@ -270,6 +304,42 @@ internal class UiConfiguration(
         return type
     }
 
+    private fun validateControlMedia(media: JSONArray?, name: String) {
+        if (media == null) {
+            throw IllegalArgumentException("$name must be an array.")
+        }
+        for (index in 0 until media.length()) {
+            val ruleName = "$name[$index]"
+            val rule = media.opt(index) as? JSONObject
+                ?: throw IllegalArgumentException("$ruleName must be an object.")
+            val hasMin = rule.has("minWidth")
+            val hasMax = rule.has("maxWidth")
+            if (!hasMin && !hasMax) {
+                throw IllegalArgumentException("$ruleName needs minWidth or maxWidth.")
+            }
+            for (key in listOf("minWidth", "maxWidth")) {
+                if (rule.has(key) && ((rule.opt(key) as? Int) ?: -1) < 0) {
+                    throw IllegalArgumentException("$ruleName.$key must be a non-negative integer.")
+                }
+            }
+            if (rule.opt("visible") !is Boolean) {
+                throw IllegalArgumentException("$ruleName.visible must be a boolean.")
+            }
+        }
+    }
+
+    internal fun resolveControlVisibility(media: JSONArray, widthDp: Int): Boolean {
+        var visible = true
+        for (index in 0 until media.length()) {
+            val rule = media.getJSONObject(index)
+            if (widthDp >= rule.optInt("minWidth", 0) &&
+                widthDp <= rule.optInt("maxWidth", Int.MAX_VALUE)) {
+                visible = rule.getBoolean("visible")
+            }
+        }
+        return visible
+    }
+
     internal fun orientationFor(layout: JSONObject?, widthDp: Int): Int =
         if (resolveLayoutType(layout, widthDp) == "horizontal") android.widget.LinearLayout.HORIZONTAL
         else android.widget.LinearLayout.VERTICAL
@@ -280,7 +350,8 @@ internal class UiConfiguration(
         val supportedEvents = when (requiredString(control, "type")) {
             "button" -> setOf("click")
             "comboBox", "checkbox", "radioGroup", "list" -> setOf("change")
-            "textField", "textArea", "slider" -> setOf("input")
+            "textField" -> setOf("input", "enter")
+            "textArea", "slider" -> setOf("input")
             else -> emptySet()
         }
         val eventTypes = actions.keys()
@@ -350,6 +421,9 @@ internal class UiConfiguration(
 
     internal fun foregroundColor(control: JSONObject): Int? =
         optionalColor(control, "foregroundColor", "control.foregroundColor")
+
+    internal fun borderColor(control: JSONObject): Int? =
+        optionalColor(control, "borderColor", "control.borderColor")
 
     internal fun contrastForeground(color: Int): Int {
         fun linear(channel: Int): Double {
@@ -424,4 +498,28 @@ internal class UiConfiguration(
     internal fun positiveInt(objectValue: JSONObject, key: String): Int =
         requiredInt(objectValue, key).takeIf { it > 0 }
             ?: throw IllegalArgumentException("$key must be a positive integer.")
+
+    internal fun nonNegativeInt(objectValue: JSONObject, key: String): Int =
+        requiredInt(objectValue, key).takeIf { it >= 0 }
+            ?: throw IllegalArgumentException("$key must be a non-negative integer.")
+
+    internal fun requiredDimension(objectValue: JSONObject, key: String): UiDimension =
+        optionalDimension(objectValue, key)
+            ?: throw IllegalArgumentException("$key must be a positive pixel value or percentage.")
+
+    internal fun optionalDimension(objectValue: JSONObject, key: String): UiDimension? {
+        if (!objectValue.has(key)) return null
+        val value = objectValue.opt(key)
+        if (value is Int && value > 0) return UiDimension(value, null)
+        if (value is String) {
+            val match = Regex("^(\\d+(?:\\.\\d+)?)%$").matchEntire(value)
+            val percent = match?.groupValues?.get(1)?.toDoubleOrNull()
+            if (percent != null && percent > 0 && percent <= 100) {
+                return UiDimension(null, percent)
+            }
+        }
+        throw IllegalArgumentException(
+            "$key must be a positive pixel value or a percentage greater than 0% and at most 100."
+        )
+    }
 }
